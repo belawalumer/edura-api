@@ -5,8 +5,10 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { Test } from '../../tests/entities/test.entity';
 
 @Entity('chapters')
 export class Chapter {
@@ -29,4 +31,7 @@ export class Chapter {
   })
   @JoinColumn({ name: 'grade_subject_id' })
   gradeSubject: GradeSubject;
+
+  @OneToMany(() => Test, (test) => test.category)
+  tests: Test[];
 }

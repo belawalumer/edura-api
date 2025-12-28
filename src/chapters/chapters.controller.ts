@@ -11,6 +11,7 @@ import {
 import { ChaptersService } from './chapters.service';
 import { CreateChapterDto } from './dto/create-chapter.dto';
 import { UpdateChapterDto } from './dto/update-chapter.dto';
+import { PaginationQueryDto } from 'src/common/dto';
 
 @Controller('chapters')
 export class ChaptersController {
@@ -22,14 +23,16 @@ export class ChaptersController {
   }
 
   @Get()
-  findAll(
-    @Query('gradeId') gradeId?: string,
-    @Query('subjectId') subjectId?: string,
+  findAll(@Query() query: PaginationQueryDto) {
+    return this.chaptersService.findAll(query);
+  }
+
+  @Get('by-grade-subject')
+  getChaptersByGradeAndSubject(
+    @Query('gradeId') gradeId: string,
+    @Query('subjectId') subjectId: string,
   ) {
-    return this.chaptersService.findAll(
-      gradeId ? +gradeId : undefined,
-      subjectId ? +subjectId : undefined,
-    );
+    return this.chaptersService.findByGradeAndSubject(+gradeId, +subjectId);
   }
 
   @Get(':id')
