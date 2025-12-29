@@ -14,6 +14,8 @@ import { Category } from 'src/categories/entities/category.entity';
 import { Chapter } from 'src/chapters/entities/chapter.entity';
 import { GradeSubject } from 'src/grade-subjects/entities/grade-subject.entity';
 import { PaginationQueryDto } from 'src/common/dto';
+import { Grade } from 'src/grades/entities/grade.entity';
+import { Subject } from 'src/subjects/entities/subject.entity';
 
 @Injectable()
 export class TestsService {
@@ -51,15 +53,21 @@ export class TestsService {
       if (!category)
         throw new NotFoundException(`Category with ID ${categoryId} not found`);
 
-      // Validate grade-subject
-      const gradeSubject = await manager.findOne(GradeSubject, {
-        where: { grade: { id: gradeId }, subject: { id: subjectId } },
-        relations: ['grade', 'subject'],
-      });
-      if (!gradeSubject)
-        throw new NotFoundException(
-          `This subject is not assigned to the selected grade`,
-        );
+      // VALIDATE GRADE
+      let grade: Grade | undefined = undefined;
+      if (gradeId) {
+        grade = await manager.findOne(Grade, { where: { id: gradeId } });
+        if (!grade)
+          throw new NotFoundException(`Grade with ID ${gradeId} not found`);
+      }
+
+      // VALIDATE SUBJECT
+      let subject: Subject | undefined = undefined;
+      if (subjectId) {
+        subject = await manager.findOne(Subject, { where: { id: subjectId } });
+        if (!subject)
+          throw new NotFoundException(`Subject with ID ${subjectId} not found`);
+      }
 
       // Validate chapter
       let chapter: Chapter | undefined = undefined;
