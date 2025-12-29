@@ -13,7 +13,7 @@ import { Chapter } from '../../chapters/entities/chapter.entity';
 import { GradeSubject } from '../../grade-subjects/entities/grade-subject.entity';
 import { Question } from './question.entity';
 
-@Entity('tests')
+@Entity('academic_tests')
 export class Test {
   @PrimaryGeneratedColumn()
   id: number;

@@ -13,7 +13,7 @@ import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
 import { PaginationQueryDto } from 'src/common/dto';
 
-@Controller('tests')
+@Controller('academic_tests')
 export class TestsController {
   constructor(private readonly testsService: TestsService) {}
 
