@@ -1,3 +1,4 @@
+import { Test } from '../../tests/entities/test.entity';
 import { Status } from '../../common/enums';
 import { Grade } from '../../grades/entities/grade.entity';
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
@@ -20,4 +21,7 @@ export class Category {
 
   @OneToMany(() => Grade, (grade) => grade.category)
   grades: Grade[];
+
+  @OneToMany(() => Test, (test) => test.category)
+  tests: Test[];
 }
