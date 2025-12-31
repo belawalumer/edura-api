@@ -8,6 +8,8 @@ import { SubjectsModule } from './subjects/subjects.module';
 import { GradeSubjectsModule } from './grade-subjects/grade-subjects.module';
 import { ChaptersModule } from './chapters/chapters.module';
 import { TestsModule } from './tests/tests.module';
+import { BannersAnnouncementsModule } from './banners_announcements/banners_announcements.module';
+import { FaqsModule } from './faqs/faqs.module';
 
 @Module({
   imports: [
@@ -42,6 +44,10 @@ import { TestsModule } from './tests/tests.module';
     ChaptersModule,
 
     TestsModule,
+
+    BannersAnnouncementsModule,
+
+    FaqsModule,
   ],
 })
 export class AppModule {}

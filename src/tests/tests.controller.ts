@@ -7,12 +7,15 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { TestsService } from './tests.service';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
 import { PaginationQueryDto } from 'src/common/dto';
+import { AuthGuard } from 'src/auth/guard/auth_guard';
 
+@UseGuards(AuthGuard)
 @Controller('academic_tests')
 export class TestsController {
   constructor(private readonly testsService: TestsService) {}
