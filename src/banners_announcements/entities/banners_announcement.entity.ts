@@ -1,4 +1,3 @@
-// src/contents/entities/content.entity.ts
 import { ContentType, Status } from '../../common/enums';
 import {
   Entity,

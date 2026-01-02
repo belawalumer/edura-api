@@ -6,11 +6,14 @@ import {
   Patch,
   Param,
   Delete,
+  UseGuards,
 } from '@nestjs/common';
 import { FaqsService } from './faqs.service';
 import { CreateFaqDto } from './dto/create-faq.dto';
 import { UpdateFaqDto } from './dto/update-faq.dto';
+import { AuthGuard } from 'src/auth/guard/auth_guard';
 
+@UseGuards(AuthGuard)
 @Controller('faqs')
 export class FaqsController {
   constructor(private readonly faqsService: FaqsService) {}
