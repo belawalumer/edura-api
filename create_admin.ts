@@ -12,6 +12,7 @@ async function createAdmin() {
 
     const adminPhone = process.env.ADMIN_PHONE;
     const adminPassword = process.env.ADMIN_PASSWORD;
+    const adminEmail = process.env.ADMIN_EMAIL;
 
     if (!adminPhone || !adminPassword) {
       console.error(
@@ -38,7 +39,7 @@ async function createAdmin() {
     const admin = userRepo.create({
       name: 'Admin',
       phone: adminPhone,
-      email: '',
+      email: adminEmail,
       password: hashedPassword,
       role: UserRole.ADMIN,
       image: null,

@@ -556,10 +556,9 @@ export class TestsService {
     );
 
     if (skippedQuestions.length > 0) {
-      return {
-        message: `You cannot skip a question. Please answer all questions before proceeding.`,
-        remaining_duration: attempt.remaining_duration ?? 0,
-      };
+      throw new BadRequestException(
+        'You cannot skip a question. Please answer all questions before proceeding.'
+      );
     }
 
     // Validate that all submitted questions belong to this test
@@ -649,10 +648,9 @@ export class TestsService {
     );
 
     if (skippedQuestions.length > 0) {
-      return {
-        message: 'You cannot skip a question. Please answer all questions.',
-        remaining_duration: attempt.remaining_duration ?? 0,
-      };
+      throw new BadRequestException(
+        'You cannot skip a question. Please answer all questions before proceeding.'
+      );
     }
 
     // Validate questions belong to test

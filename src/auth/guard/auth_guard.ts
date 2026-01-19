@@ -70,36 +70,40 @@ export class AuthGuard implements CanActivate {
         phone: dbUser.phone,
         role: dbUser.role,
       };
-    } catch {
-      const { data, error } = await this.supabase.auth.getUser(token);
-      console.log(data);
+    } catch (err: any) {
+      const e = err as { name?: string };
+      if (e.name === 'TokenExpiredError' || e.name === 'JsonWebTokenError') {
+        const { data, error } = await this.supabase.auth.getUser(token);
 
-      if (error || !data.user?.email) {
-        throw new UnauthorizedException('Invalid token');
+        if (error || !data.user?.email) {
+          throw new UnauthorizedException('Invalid token');
+        }
+
+        const email = data.user.email;
+        let dbUser = await this.userRepo.findOneBy({ email });
+
+        if (!dbUser) {
+          dbUser = this.userRepo.create({
+            email,
+            role: UserRole.USER,
+            phone: data.user.phone,
+            name: (data.user.user_metadata?.full_name || email) as string,
+            image: (data.user.user_metadata?.avatar_url || undefined) as string,
+          });
+          await this.userRepo.save(dbUser);
+        }
+
+        user = {
+          id: dbUser.id,
+          email: dbUser.email,
+          phone: dbUser.phone,
+          role: dbUser.role,
+          name: dbUser.name,
+          image: dbUser.image ?? undefined,
+        };
+      } else {
+        throw err;
       }
-
-      const email = data.user.email;
-      let dbUser = await this.userRepo.findOneBy({ email });
-
-      if (!dbUser) {
-        dbUser = this.userRepo.create({
-          email,
-          role: UserRole.USER,
-          phone: data.user.phone,
-          name: (data.user.user_metadata?.full_name || email) as string,
-          image: (data.user.user_metadata?.avatar_url || undefined) as string,
-        });
-        await this.userRepo.save(dbUser);
-      }
-
-      user = {
-        id: dbUser.id,
-        email: dbUser.email,
-        phone: dbUser.phone,
-        role: dbUser.role,
-        name: dbUser.name,
-        image: dbUser.image ?? undefined,
-      };
     }
 
     const roles =
