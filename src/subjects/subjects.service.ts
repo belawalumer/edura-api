@@ -10,7 +10,7 @@ import { PaginationQueryDto } from '../common/dto';
 export class SubjectsService {
   constructor(
     @InjectRepository(Subject)
-    private readonly subjectRepo: Repository<Subject>,
+    private readonly subjectRepo: Repository<Subject>
   ) {}
 
   async create(createDto: CreateSubjectDto) {
@@ -57,14 +57,6 @@ export class SubjectsService {
         },
       },
     };
-  }
-
-  async findOne(id: number) {
-    const subject = await this.subjectRepo.findOne({ where: { id } });
-    if (!subject)
-      throw new NotFoundException(`Subject with ID ${id} not found`);
-
-    return { message: 'Subject retrieved successfully', data: subject };
   }
 
   async update(id: number, updateDto: UpdateSubjectDto) {

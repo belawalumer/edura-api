@@ -10,7 +10,7 @@ import { BannersAnnouncement } from './entities/banners_announcement.entity';
 export class BannersAnnouncementsService {
   constructor(
     @InjectRepository(BannersAnnouncement)
-    private readonly bannersAnnouncementRepo: Repository<BannersAnnouncement>,
+    private readonly bannersAnnouncementRepo: Repository<BannersAnnouncement>
   ) {}
 
   async create(createDto: CreateBannersAnnouncementDto) {
@@ -62,7 +62,7 @@ export class BannersAnnouncementsService {
 
     if (!content) {
       throw new NotFoundException(
-        `Banner/Announcement with ID ${id} not found`,
+        `Banner/Announcement with ID ${id} not found`
       );
     }
 
@@ -79,7 +79,7 @@ export class BannersAnnouncementsService {
 
     if (!content) {
       throw new NotFoundException(
-        `Banner/Announcement with ID ${id} not found`,
+        `Banner/Announcement with ID ${id} not found`
       );
     }
 
@@ -99,7 +99,7 @@ export class BannersAnnouncementsService {
 
     if (!content) {
       throw new NotFoundException(
-        `Banner/Announcement with ID ${id} not found`,
+        `Banner/Announcement with ID ${id} not found`
       );
     }
 

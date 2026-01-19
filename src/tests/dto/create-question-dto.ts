@@ -20,4 +20,8 @@ export class CreateQuestionDto {
   @Type(() => CreateOptionDto)
   @ArrayMinSize(4)
   options: CreateOptionDto[];
+
+  @IsOptional()
+  @IsInt()
+  divisionId?: number;
 }

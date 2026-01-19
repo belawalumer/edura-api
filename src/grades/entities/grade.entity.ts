@@ -1,15 +1,6 @@
 import { GradeSubject } from '../../grade-subjects/entities/grade-subject.entity';
-import { Category } from '../../categories/entities/category.entity';
 import { Status } from '../../common/enums';
-import {
-  Column,
-  Entity,
-  JoinColumn,
-  ManyToOne,
-  OneToMany,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
-import { Test } from '../../tests/entities/test.entity';
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('grades')
 export class Grade {
@@ -27,13 +18,6 @@ export class Grade {
   })
   status: Status;
 
-  @ManyToOne(() => Category, (category) => category.grades)
-  @JoinColumn({ name: 'category_id' })
-  category: Category;
-
   @OneToMany(() => GradeSubject, (gs) => gs.grade)
   gradeSubjects: GradeSubject[];
-
-  @OneToMany(() => Test, (test) => test.grade)
-  tests: Test[];
 }

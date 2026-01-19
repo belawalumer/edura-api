@@ -4,11 +4,15 @@ import {
   IsInt,
   Min,
   ValidateNested,
-  ArrayMinSize,
+  IsOptional,
 } from 'class-validator';
 import { CreateQuestionDto } from './create-question-dto';
 
 export class CreateDivisionDto {
+  @IsOptional()
+  @IsInt()
+  id?: number;
+
   @IsNotEmpty()
   title: string;
 
@@ -26,6 +30,5 @@ export class CreateDivisionDto {
 
   @ValidateNested({ each: true })
   @Type(() => CreateQuestionDto)
-  @ArrayMinSize(1)
   questions: CreateQuestionDto[];
 }

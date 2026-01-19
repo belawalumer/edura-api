@@ -8,6 +8,10 @@ import { Option } from './entities/option.entity';
 import { Category } from 'src/categories/entities/category.entity';
 import { Chapter } from 'src/chapters/entities/chapter.entity';
 import { GradeSubject } from 'src/grade-subjects/entities/grade-subject.entity';
+import { User } from 'src/user/entities/user.entity';
+import { TestAttempt } from './entities/test_attempt.entity';
+import { UserAnswer } from './entities/user_answers.entity';
+import { AttemptedQuestion } from './entities/attempted_questions.entity';
 
 @Module({
   imports: [
@@ -18,6 +22,10 @@ import { GradeSubject } from 'src/grade-subjects/entities/grade-subject.entity';
       Category,
       Chapter,
       GradeSubject,
+      User,
+      TestAttempt,
+      UserAnswer,
+      AttemptedQuestion,
     ]),
   ],
   controllers: [TestsController],

@@ -5,14 +5,18 @@ import {
   IsOptional,
   Min,
   ValidateNested,
-  ArrayMinSize,
+  IsEnum,
 } from 'class-validator';
 import { CreateQuestionDto } from './create-question-dto';
 import { CreateDivisionDto } from './create-division-dto';
+import { Status } from 'src/common/enums';
 
 export class CreateTestDto {
   @IsNotEmpty()
   title: string;
+
+  @IsEnum(Status)
+  status: Status;
 
   @IsInt()
   @Min(1)
@@ -42,13 +46,11 @@ export class CreateTestDto {
 
   @ValidateNested({ each: true })
   @Type(() => CreateQuestionDto)
-  @ArrayMinSize(1)
   @IsOptional()
   questions?: CreateQuestionDto[];
 
   @ValidateNested({ each: true })
   @Type(() => CreateDivisionDto)
   @IsOptional()
-  @ArrayMinSize(1)
   divisions?: CreateDivisionDto[];
 }

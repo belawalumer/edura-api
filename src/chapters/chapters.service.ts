@@ -14,7 +14,7 @@ export class ChaptersService {
     private readonly chapterRepo: Repository<Chapter>,
 
     @InjectRepository(GradeSubject)
-    private readonly gradeSubjectRepo: Repository<GradeSubject>,
+    private readonly gradeSubjectRepo: Repository<GradeSubject>
   ) {}
 
   async create(createChapterDto: CreateChapterDto) {
@@ -30,7 +30,7 @@ export class ChaptersService {
 
     if (!gradeSubject)
       throw new NotFoundException(
-        'This subject is not assigned to the selected grade',
+        'This subject is not assigned to the selected grade'
       );
 
     const chapter = this.chapterRepo.create({
@@ -41,7 +41,16 @@ export class ChaptersService {
 
     const savedChapter = await this.chapterRepo.save(chapter);
 
-    return { message: 'Chapter created successfully', data: savedChapter };
+    return {
+      message: 'Chapter created successfully',
+      data: {
+        id: savedChapter.id,
+        name: savedChapter.name,
+        status: savedChapter.status,
+        grade: gradeSubject.grade,
+        subject: gradeSubject.subject,
+      },
+    };
   }
 
   async findAll(query: PaginationQueryDto) {
@@ -62,10 +71,18 @@ export class ChaptersService {
 
     const [items, total] = await qb.getManyAndCount();
 
+    const mappedItems = items.map((chapter) => ({
+      id: chapter.id,
+      name: chapter.name,
+      status: chapter.status,
+      grade: chapter.gradeSubject?.grade,
+      subject: chapter.gradeSubject?.subject,
+    }));
+
     return {
       message: 'Chapters retrieved successfully',
       data: {
-        items,
+        items: mappedItems,
         meta: {
           total,
           page,
@@ -98,7 +115,7 @@ export class ChaptersService {
     };
   }
 
-  async findOne(id: number) {
+  async update(id: number, updateChapterDto: UpdateChapterDto) {
     const chapter = await this.chapterRepo.findOne({
       where: { id },
       relations: ['gradeSubject', 'gradeSubject.grade', 'gradeSubject.subject'],
@@ -108,22 +125,8 @@ export class ChaptersService {
       throw new NotFoundException(`Chapter with ID ${id} not found`);
     }
 
-    return { message: 'Chapter retrieved successfully', data: chapter };
-  }
-
-  async update(id: number, updateChapterDto: UpdateChapterDto) {
-    const chapter = await this.chapterRepo.findOne({
-      where: { id },
-      relations: ['gradeSubject'],
-    });
-
-    if (!chapter) {
-      throw new NotFoundException(`Chapter with ID ${id} not found`);
-    }
-
     const { name, status, gradeId, subjectId } = updateChapterDto;
 
-    //Update grade/subject if provided
     if (gradeId && subjectId) {
       const gradeSubject = await this.gradeSubjectRepo.findOne({
         where: { grade: { id: gradeId }, subject: { id: subjectId } },
@@ -132,14 +135,12 @@ export class ChaptersService {
 
       if (!gradeSubject) {
         throw new NotFoundException(
-          'This subject is not assigned to the selected grade',
+          'This subject is not assigned to the selected grade'
         );
       }
-
       chapter.gradeSubject = gradeSubject;
     }
 
-    // Update name/status if provided
     if (name !== undefined) chapter.name = name;
     if (status !== undefined) chapter.status = status;
 
@@ -147,7 +148,13 @@ export class ChaptersService {
 
     return {
       message: 'Chapter updated successfully',
-      data: updatedChapter,
+      data: {
+        id: updatedChapter.id,
+        name: updatedChapter.name,
+        status: updatedChapter.status,
+        grade: updatedChapter.gradeSubject?.grade,
+        subject: updatedChapter.gradeSubject?.subject,
+      },
     };
   }
 

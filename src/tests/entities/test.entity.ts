@@ -13,6 +13,7 @@ import { Chapter } from '../../chapters/entities/chapter.entity';
 import { Question } from './question.entity';
 import { Grade } from '../../grades/entities/grade.entity';
 import { Subject } from '../../subjects/entities/subject.entity';
+import { Status } from '../../common/enums';
 
 @Entity('academic_tests')
 export class Test {
@@ -21,6 +22,14 @@ export class Test {
 
   @Column({ type: 'varchar', length: 255 })
   title: string;
+
+  @Column({
+    type: 'enum',
+    enum: Status,
+    enumName: 'status_enum',
+    default: Status.ACTIVE,
+  })
+  status: Status;
 
   @Column({ type: 'int' })
   total_questions: number;
@@ -38,19 +47,27 @@ export class Test {
   @OneToMany(() => Test, (test) => test.parentTest)
   divisions?: Test[];
 
-  @ManyToOne(() => Category, { eager: true })
+  @ManyToOne(() => Category, { eager: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'category_id' })
   category: Category;
 
-  @ManyToOne(() => Grade, { nullable: true, eager: true })
+  @ManyToOne(() => Grade, { nullable: true, eager: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'grade_id' })
   grade?: Grade;
 
-  @ManyToOne(() => Subject, { nullable: true, eager: true })
+  @ManyToOne(() => Subject, {
+    nullable: true,
+    eager: true,
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'subject_id' })
   subject?: Subject;
 
-  @ManyToOne(() => Chapter, { nullable: true, eager: true })
+  @ManyToOne(() => Chapter, {
+    nullable: true,
+    eager: true,
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'chapter_id' })
   chapter?: Chapter;
 

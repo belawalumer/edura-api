@@ -4,7 +4,6 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
-  DeleteDateColumn,
 } from 'typeorm';
 import { Question } from './question.entity';
 
@@ -25,7 +24,4 @@ export class Option {
   })
   @JoinColumn({ name: 'question_id' })
   question: Question;
-
-  @DeleteDateColumn({ name: 'deleted_at', nullable: true })
-  deletedAt?: Date;
 }

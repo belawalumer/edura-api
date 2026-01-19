@@ -10,6 +10,7 @@ import { ChaptersModule } from './chapters/chapters.module';
 import { TestsModule } from './tests/tests.module';
 import { BannersAnnouncementsModule } from './banners_announcements/banners_announcements.module';
 import { FaqsModule } from './faqs/faqs.module';
+import { UserModule } from './user/user.module';
 
 @Module({
   imports: [
@@ -32,22 +33,15 @@ import { FaqsModule } from './faqs/faqs.module';
     }),
 
     AuthModule,
-
     CategoriesModule,
-
     GradesModule,
-
     SubjectsModule,
-
     GradeSubjectsModule,
-
     ChaptersModule,
-
     TestsModule,
-
     BannersAnnouncementsModule,
-
     FaqsModule,
+    UserModule,
   ],
 })
 export class AppModule {}

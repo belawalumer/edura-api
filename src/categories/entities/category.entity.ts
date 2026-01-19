@@ -1,7 +1,5 @@
-import { Test } from '../../tests/entities/test.entity';
 import { Status } from '../../common/enums';
-import { Grade } from '../../grades/entities/grade.entity';
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('categories')
 export class Category {
@@ -9,7 +7,7 @@ export class Category {
   id: number;
 
   @Column()
-  title: string;
+  name: string;
 
   @Column({
     type: 'enum',
@@ -18,10 +16,4 @@ export class Category {
     default: Status.ACTIVE,
   })
   status: Status;
-
-  @OneToMany(() => Grade, (grade) => grade.category)
-  grades: Grade[];
-
-  @OneToMany(() => Test, (test) => test.category)
-  tests: Test[];
 }

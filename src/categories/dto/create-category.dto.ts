@@ -3,7 +3,7 @@ import { Status } from 'src/common/enums';
 
 export class CreateCategoryDto {
   @IsNotEmpty({ message: 'Title is required' })
-  title: string;
+  name: string;
 
   @IsOptional()
   @IsEnum(Status, { message: 'Status must be active or inactive' })
