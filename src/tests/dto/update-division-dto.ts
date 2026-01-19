@@ -1,15 +1,17 @@
 import { Type } from 'class-transformer';
 import {
-  IsOptional,
   IsInt,
+  IsOptional,
   Min,
   ValidateNested,
   ArrayMinSize,
 } from 'class-validator';
 import { CreateQuestionDto } from './create-question-dto';
-import { UpdateDivisionDto } from './update-division-dto';
 
-export class UpdateTestDto {
+export class UpdateDivisionDto {
+  @IsInt()
+  id: number;
+
   @IsOptional()
   title?: string;
 
@@ -25,29 +27,11 @@ export class UpdateTestDto {
 
   @IsOptional()
   @IsInt()
-  categoryId?: number;
-
-  @IsOptional()
-  @IsInt()
-  gradeId?: number;
-
-  @IsOptional()
-  @IsInt()
   subjectId?: number;
-
-  @IsOptional()
-  @IsInt()
-  chapterId?: number | null;
 
   @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => CreateQuestionDto)
   @ArrayMinSize(1)
   questions?: CreateQuestionDto[];
-
-  @IsOptional()
-  @ValidateNested({ each: true })
-  @Type(() => UpdateDivisionDto)
-  @ArrayMinSize(1)
-  divisions?: UpdateDivisionDto[];
 }

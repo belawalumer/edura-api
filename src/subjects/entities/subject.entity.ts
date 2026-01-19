@@ -1,6 +1,7 @@
 import { GradeSubject } from '../../grade-subjects/entities/grade-subject.entity';
 import { Status } from '../../common/enums';
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { Test } from '../../tests/entities/test.entity';
 
 @Entity('subjects')
 export class Subject {
@@ -20,4 +21,7 @@ export class Subject {
 
   @OneToMany(() => GradeSubject, (gs) => gs.subject)
   gradeSubjects: GradeSubject[];
+
+  @OneToMany(() => Test, (test) => test.subject)
+  tests: Test[];
 }

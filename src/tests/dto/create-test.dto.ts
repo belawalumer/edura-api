@@ -8,6 +8,7 @@ import {
   ArrayMinSize,
 } from 'class-validator';
 import { CreateQuestionDto } from './create-question-dto';
+import { CreateDivisionDto } from './create-division-dto';
 
 export class CreateTestDto {
   @IsNotEmpty()
@@ -27,11 +28,13 @@ export class CreateTestDto {
 
   @IsInt()
   @IsNotEmpty()
-  gradeId: number;
+  @IsOptional()
+  gradeId?: number;
 
   @IsInt()
   @IsNotEmpty()
-  subjectId: number;
+  @IsOptional()
+  subjectId?: number;
 
   @IsInt()
   @IsOptional()
@@ -40,5 +43,12 @@ export class CreateTestDto {
   @ValidateNested({ each: true })
   @Type(() => CreateQuestionDto)
   @ArrayMinSize(1)
-  questions: CreateQuestionDto[];
+  @IsOptional()
+  questions?: CreateQuestionDto[];
+
+  @ValidateNested({ each: true })
+  @Type(() => CreateDivisionDto)
+  @IsOptional()
+  @ArrayMinSize(1)
+  divisions?: CreateDivisionDto[];
 }

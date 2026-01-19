@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, EntityManager } from 'typeorm';
 import { Test } from './entities/test.entity';
 import { Question } from './entities/question.entity';
 import { Option } from './entities/option.entity';
@@ -12,23 +12,16 @@ import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
 import { Category } from 'src/categories/entities/category.entity';
 import { Chapter } from 'src/chapters/entities/chapter.entity';
-import { GradeSubject } from 'src/grade-subjects/entities/grade-subject.entity';
 import { PaginationQueryDto } from 'src/common/dto';
+import { Grade } from 'src/grades/entities/grade.entity';
+import { Subject } from 'src/subjects/entities/subject.entity';
+import { CreateQuestionDto } from './dto/create-question-dto';
 
 @Injectable()
 export class TestsService {
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(Test) private readonly testRepo: Repository<Test>,
-    @InjectRepository(Question)
-    private readonly questionRepo: Repository<Question>,
-    @InjectRepository(Option) private readonly optionRepo: Repository<Option>,
-    @InjectRepository(Category)
-    private readonly categoryRepo: Repository<Category>,
-    @InjectRepository(GradeSubject)
-    private readonly gradeSubjectRepo: Repository<GradeSubject>,
-    @InjectRepository(Chapter)
-    private readonly chapterRepo: Repository<Chapter>,
   ) {}
 
   async create(createTestDto: CreateTestDto) {
@@ -41,6 +34,7 @@ export class TestsService {
       subjectId,
       chapterId,
       questions,
+      divisions,
     } = createTestDto;
 
     return await this.dataSource.transaction(async (manager) => {
@@ -51,76 +45,200 @@ export class TestsService {
       if (!category)
         throw new NotFoundException(`Category with ID ${categoryId} not found`);
 
-      // Validate grade-subject
-      const gradeSubject = await manager.findOne(GradeSubject, {
-        where: { grade: { id: gradeId }, subject: { id: subjectId } },
-        relations: ['grade', 'subject'],
-      });
-      if (!gradeSubject)
-        throw new NotFoundException(
-          `This subject is not assigned to the selected grade`,
-        );
+      // Determine test type
+      const isEntryTest = category.title.toLowerCase().includes('entry tests');
+      const isSubjectTest = !isEntryTest;
 
-      // Validate chapter
-      let chapter: Chapter | undefined = undefined;
-      if (chapterId) {
-        const foundChapter = await this.chapterRepo.findOne({
-          where: { id: chapterId },
-        });
-        if (!foundChapter)
-          throw new NotFoundException(`Chapter with ID ${chapterId} not found`);
-        chapter = foundChapter;
-      }
-
-      // Create test
-      const test = manager.create(Test, {
-        title,
-        total_questions,
-        total_duration: duration_minutes,
-        category,
-        gradeSubject,
-        chapter,
-      });
-      await manager.save(test);
-
-      for (const qDto of questions) {
-        if (!qDto.options || qDto.options.length < 2)
+      // SUBJECT TEST VALIDATION
+      if (isSubjectTest) {
+        if (!gradeId)
           throw new BadRequestException(
-            `Question "${qDto.title}" must have at least 2 options`,
+            'gradeId is required for subject tests',
+          );
+        if (!subjectId)
+          throw new BadRequestException(
+            'subjectId is required for subject tests',
+          );
+        if (divisions?.length)
+          throw new BadRequestException('Subject tests cannot have divisions');
+        if (!questions?.length)
+          throw new BadRequestException(
+            'Subject tests must have at least one question',
           );
 
-        // 1️⃣ Save question FIRST
-        const question = manager.create(Question, {
-          title: qDto.title,
-          test,
-          correctOptionId: null,
+        const grade = await manager.findOne(Grade, { where: { id: gradeId } });
+        if (!grade)
+          throw new NotFoundException(`Grade with ID ${gradeId} not found`);
+
+        const subject = await manager.findOne(Subject, {
+          where: { id: subjectId },
         });
-        await manager.save(question);
+        if (!subject)
+          throw new NotFoundException(`Subject with ID ${subjectId} not found`);
 
-        // 2️⃣ Create & save options
-        const options = qDto.options.map((optDto) =>
-          manager.create(Option, {
-            value: optDto.value,
-            isCorrect: optDto.isCorrect,
-            question, // question.id now exists ✅
-          }),
-        );
+        let chapter: Chapter | undefined;
+        if (chapterId) {
+          const foundChapter = await manager.findOne(Chapter, {
+            where: { id: chapterId },
+          });
+          if (!foundChapter)
+            throw new NotFoundException(
+              `Chapter with ID ${chapterId} not found`,
+            );
+          chapter = foundChapter;
+        }
 
-        await manager.save(options);
+        const test = manager.create(Test, {
+          title,
+          total_questions,
+          total_duration: duration_minutes,
+          category,
+          grade,
+          subject,
+          chapter,
+        });
+        await manager.save(test);
+        await this.createQuestions(manager, test, questions);
 
-        // 3️⃣ Set correctOptionId
-        const correctOption = options.find((o) => o.isCorrect);
-        if (!correctOption)
-          throw new BadRequestException(
-            `Question "${qDto.title}" must have a correct option`,
-          );
-
-        question.correctOptionId = correctOption.id;
-        await manager.save(question);
+        return { message: 'Subject test created successfully', data: test };
       }
 
-      return { message: 'Test created successfully', data: test };
+      // ENTRY TEST WITHOUT DIVISIONS VALIDATION
+      if (isEntryTest && (!divisions || divisions.length === 0)) {
+        if (!questions?.length)
+          throw new BadRequestException(
+            'Entry tests without divisions must have at least one question',
+          );
+        if (gradeId)
+          throw new BadRequestException(
+            'gradeId is not allowed for entry tests without divisions',
+          );
+        if (subjectId)
+          throw new BadRequestException(
+            'subjectId is not allowed for entry tests without divisions',
+          );
+
+        const test = manager.create(Test, {
+          title,
+          total_questions,
+          total_duration: duration_minutes,
+          category,
+        });
+        await manager.save(test);
+        await this.createQuestions(manager, test, questions);
+
+        return {
+          message: 'Entry test (without divisions) created successfully',
+          data: test,
+        };
+      }
+
+      // ENTRY TEST WITH DIVISIONS VALIDATION
+      if (isEntryTest && divisions && divisions.length > 0) {
+        if (questions?.length)
+          throw new BadRequestException(
+            'Parent questions are not allowed for entry tests with divisions',
+          );
+        if (gradeId)
+          throw new BadRequestException(
+            'gradeId is not allowed for entry tests with divisions',
+          );
+        if (subjectId)
+          throw new BadRequestException(
+            'subjectId is not allowed for entry tests with divisions',
+          );
+
+        const parentTest = manager.create(Test, {
+          title,
+          total_questions,
+          total_duration: duration_minutes,
+          category,
+        });
+        await manager.save(parentTest);
+
+        for (const div of divisions) {
+          if (!div.subjectId)
+            throw new BadRequestException(
+              'Each division must have a subjectId',
+            );
+          if (!div.questions?.length)
+            throw new BadRequestException(
+              'Each division must have at least one question',
+            );
+
+          const subject = await manager.findOne(Subject, {
+            where: { id: div.subjectId },
+          });
+          if (!subject)
+            throw new NotFoundException(
+              `Subject with ID ${div.subjectId} not found`,
+            );
+
+          const divisionTest = manager.create(Test, {
+            title: div.title,
+            total_questions: div.total_questions,
+            total_duration: div.duration_minutes,
+            category,
+            subject,
+            parentTest,
+          });
+
+          await manager.save(divisionTest);
+          await this.createQuestions(manager, divisionTest, div.questions);
+        }
+
+        return {
+          message: 'Entry test (with divisions) created successfully',
+          data: parentTest,
+        };
+      }
+
+      throw new BadRequestException('Invalid request body for test creation');
     });
+  }
+
+  private async createQuestions(
+    manager: EntityManager,
+    test: Test,
+    questions: CreateQuestionDto[],
+  ) {
+    for (const qDto of questions) {
+      if (!qDto.options || qDto.options.length < 2) {
+        throw new BadRequestException(
+          `Question "${qDto.title}" must have at least 2 options`,
+        );
+      }
+
+      const question = manager.create(Question, {
+        title: qDto.title,
+        test,
+        correctOptionId: null,
+      });
+      console.log(question);
+
+      await manager.save(question);
+
+      const options = qDto.options.map((opt) =>
+        manager.create(Option, {
+          value: opt.value,
+          isCorrect: opt.isCorrect,
+          question,
+        }),
+      );
+      console.log(options);
+
+      await manager.save(options);
+
+      const correctOption = options.find((o) => o.isCorrect);
+      if (!correctOption) {
+        throw new BadRequestException(
+          `Question "${qDto.title}" must have one correct option`,
+        );
+      }
+
+      question.correctOptionId = correctOption.id;
+      await manager.save(question);
+    }
   }
 
   async findAll(query: PaginationQueryDto) {
@@ -128,25 +246,77 @@ export class TestsService {
 
     const qb = this.testRepo
       .createQueryBuilder('test')
+      .where('test.parentTest IS NULL')
       .leftJoinAndSelect('test.category', 'category')
-      .leftJoinAndSelect('test.gradeSubject', 'gradeSubject')
-      .leftJoinAndSelect('gradeSubject.grade', 'grade')
-      .leftJoinAndSelect('gradeSubject.subject', 'subject')
+      .leftJoinAndSelect('test.grade', 'grade')
+      .leftJoinAndSelect('test.subject', 'subject')
       .leftJoinAndSelect('test.chapter', 'chapter')
+      .leftJoinAndSelect('test.divisions', 'divisions')
+      .leftJoinAndSelect('divisions.questions', 'divisionQuestions')
+      .leftJoinAndSelect('divisionQuestions.options', 'divisionOptions')
       .leftJoinAndSelect('test.questions', 'questions')
       .leftJoinAndSelect('questions.options', 'options')
       .orderBy('test.id', 'ASC')
       .skip((page - 1) * limit)
       .take(limit);
 
-    if (search) qb.where('test.title ILIKE :search', { search: `%${search}%` });
+    if (search) {
+      qb.andWhere('test.title ILIKE :search', { search: `%${search}%` });
+    }
 
     const [items, total] = await qb.getManyAndCount();
+
+    const itemsClean = items.map((test) => {
+      return {
+        id: test.id,
+        title: test.title,
+        total_questions: test.total_questions,
+        total_duration: test.total_duration,
+        category: test.category,
+        grade: test.grade ?? undefined,
+        subject: test.subject ?? undefined,
+        chapter: test.chapter ?? undefined,
+        questions: test.questions?.length
+          ? test.questions.map((q) => ({
+              id: q.id,
+              title: q.title,
+              correctOptionId: q.correctOptionId,
+              options: q.options?.map((o) => ({
+                id: o.id,
+                value: o.value,
+                isCorrect: o.isCorrect,
+              })),
+            }))
+          : undefined,
+        divisions: test.divisions?.length
+          ? test.divisions.map((div) => ({
+              id: div.id,
+              title: div.title,
+              total_questions: div.total_questions,
+              total_duration: div.total_duration,
+              questions: div.questions?.length
+                ? div.questions.map((q) => ({
+                    id: q.id,
+                    title: q.title,
+                    correctOptionId: q.correctOptionId,
+                    options: q.options?.map((o) => ({
+                      id: o.id,
+                      value: o.value,
+                      isCorrect: o.isCorrect,
+                    })),
+                  }))
+                : undefined,
+            }))
+          : undefined,
+        createdAt: test.createdAt,
+        updatedAt: test.updatedAt,
+      };
+    });
 
     return {
       message: 'Tests retrieved successfully',
       data: {
-        items,
+        items: itemsClean,
         meta: {
           total,
           page,
@@ -163,16 +333,65 @@ export class TestsService {
       where: { id },
       relations: [
         'category',
-        'gradeSubject',
-        'gradeSubject.grade',
-        'gradeSubject.subject',
+        'grade',
+        'subject',
         'chapter',
+        'divisions',
+        'divisions.questions',
+        'divisions.questions.options',
         'questions',
         'questions.options',
       ],
     });
+
     if (!test) throw new NotFoundException(`Test with ID ${id} not found`);
-    return { message: 'Test retrieved successfully', data: test };
+
+    const testClean = {
+      id: test.id,
+      title: test.title,
+      total_questions: test.total_questions,
+      total_duration: test.total_duration,
+      category: test.category,
+      grade: test.grade ?? undefined,
+      subject: test.subject ?? undefined,
+      chapter: test.chapter ?? undefined,
+      questions: test.questions?.length
+        ? test.questions.map((q) => ({
+            id: q.id,
+            title: q.title,
+            correctOptionId: q.correctOptionId,
+            options: q.options?.map((o) => ({
+              id: o.id,
+              value: o.value,
+              isCorrect: o.isCorrect,
+            })),
+          }))
+        : undefined,
+      divisions: test.divisions?.length
+        ? test.divisions.map((div) => ({
+            id: div.id,
+            title: div.title,
+            total_questions: div.total_questions,
+            total_duration: div.total_duration,
+            questions: div.questions?.length
+              ? div.questions.map((q) => ({
+                  id: q.id,
+                  title: q.title,
+                  correctOptionId: q.correctOptionId,
+                  options: q.options?.map((o) => ({
+                    id: o.id,
+                    value: o.value,
+                    isCorrect: o.isCorrect,
+                  })),
+                }))
+              : undefined,
+          }))
+        : undefined,
+      createdAt: test.createdAt,
+      updatedAt: test.updatedAt,
+    };
+
+    return { message: 'Test retrieved successfully', data: testClean };
   }
 
   async update(id: number, updateTestDto: UpdateTestDto) {
@@ -181,16 +400,20 @@ export class TestsService {
         where: { id },
         relations: [
           'category',
-          'gradeSubject',
-          'gradeSubject.grade',
-          'gradeSubject.subject',
+          'grade',
+          'subject',
           'chapter',
           'questions',
           'questions.options',
+          'divisions',
+          'divisions.questions',
+          'divisions.questions.options',
         ],
       });
 
-      if (!test) throw new NotFoundException(`Test with ID ${id} not found`);
+      if (!test) {
+        throw new NotFoundException(`Test with ID ${id} not found`);
+      }
 
       const {
         title,
@@ -201,6 +424,7 @@ export class TestsService {
         subjectId,
         chapterId,
         questions,
+        divisions,
       } = updateTestDto;
 
       // BASIC FIELDS
@@ -210,149 +434,209 @@ export class TestsService {
         test.total_duration = duration_minutes;
 
       // CATEGORY
-      if (categoryId) {
-        const category = await manager.findOne(Category, {
-          where: { id: categoryId },
-        });
-        if (!category)
-          throw new NotFoundException(
-            `Category with ID ${categoryId} not found`,
+      const category = categoryId
+        ? await manager.findOne(Category, { where: { id: categoryId } })
+        : test.category;
+
+      if (!category) {
+        throw new NotFoundException(`Category not found`);
+      }
+
+      test.category = category;
+
+      const isEntryTest = category.title.toLowerCase().includes('entry tests');
+      const isSubjectTest = !isEntryTest;
+
+      // SUBJECT TEST UPDATE
+      if (isSubjectTest) {
+        if (!gradeId)
+          throw new BadRequestException(
+            'gradeId is required for subject tests',
           );
-        test.category = category;
-      }
-
-      // GRADE SUBJECT
-      if (gradeId && subjectId) {
-        const gradeSubject = await manager.findOne(GradeSubject, {
-          where: { grade: { id: gradeId }, subject: { id: subjectId } },
-          relations: ['grade', 'subject'],
-        });
-        if (!gradeSubject)
-          throw new NotFoundException(
-            `GradeSubject not found for gradeId ${gradeId} and subjectId ${subjectId}`,
+        if (!subjectId)
+          throw new BadRequestException(
+            'subjectId is required for subject tests',
           );
-        test.gradeSubject = gradeSubject;
-      }
+        if (divisions?.length)
+          throw new BadRequestException('Subject tests cannot have divisions');
+        if (!questions?.length)
+          throw new BadRequestException(
+            'Subject tests must have at least one question',
+          );
 
-      // CHAPTER
-      if (chapterId !== undefined) {
-        if (chapterId === null) {
-          test.chapter = undefined;
-        } else {
-          const chapter = await manager.findOne(Chapter, {
-            where: { id: chapterId },
-          });
-          if (!chapter)
-            throw new NotFoundException(
-              `Chapter with ID ${chapterId} not found`,
-            );
-          test.chapter = chapter;
-        }
-      }
+        const grade = await manager.findOne(Grade, {
+          where: { id: gradeId },
+        });
+        if (!grade)
+          throw new NotFoundException(`Grade with ID ${gradeId} not found`);
 
-      // QUESTIONS & OPTIONS
-      if (questions && questions.length > 0) {
-        const existingQuestionsMap = new Map<number, Question>();
-        test.questions.forEach((q) => existingQuestionsMap.set(q.id, q));
+        const subject = await manager.findOne(Subject, {
+          where: { id: subjectId },
+        });
+        if (!subject)
+          throw new NotFoundException(`Subject with ID ${subjectId} not found`);
 
-        const finalQuestions: Question[] = [];
-
-        for (const qDto of questions) {
-          let question: Question;
-
-          if (qDto.id && existingQuestionsMap.has(qDto.id)) {
-            // Existing question
-            question = existingQuestionsMap.get(qDto.id)!;
-            question.title = qDto.title;
-            question = await manager.save(question);
+        let chapter: Chapter | undefined;
+        if (chapterId !== undefined) {
+          if (chapterId === null) {
+            chapter = undefined;
           } else {
-            // New question
-            question = manager.create(Question, { title: qDto.title, test });
-            question = await manager.save(question);
+            const foundChapter = await manager.findOne(Chapter, {
+              where: { id: chapterId },
+            });
+            if (!foundChapter)
+              throw new NotFoundException(
+                `Chapter with ID ${chapterId} not found`,
+              );
+            chapter = foundChapter;
           }
-
-          // Existing options
-          const existingOptions = await manager.find(Option, {
-            where: { question: { id: question.id } },
-            relations: ['question'],
-          });
-          const existingOptionsMap = new Map<number, Option>();
-          existingOptions.forEach((o) => existingOptionsMap.set(o.id, o));
-
-          const savedOptions: Option[] = [];
-
-          for (const optDto of qDto.options) {
-            let option: Option;
-
-            if (optDto.id && existingOptionsMap.has(optDto.id)) {
-              // Update existing option
-              option = existingOptionsMap.get(optDto.id)!;
-              option.value = optDto.value;
-              option.isCorrect = optDto.isCorrect;
-              option.question = question;
-              await manager.save(option);
-            } else {
-              // New option
-              option = manager.create(Option, {
-                value: optDto.value,
-                isCorrect: optDto.isCorrect,
-                question,
-              });
-              option = await manager.save(option);
-            }
-
-            savedOptions.push(option);
-          }
-
-          // Validate exactly one correct option
-          const correctOptions = savedOptions.filter((o) => o.isCorrect);
-          if (correctOptions.length !== 1)
-            throw new BadRequestException(
-              `Question "${question.title}" must have exactly one correct option`,
-            );
-
-          // Update question.correctOptionId
-          question.correctOptionId = correctOptions[0].id;
-          question.options = savedOptions;
-          await manager.save(question);
-
-          // Remove old options not in DTO
-          const dtoOptionIds = qDto.options
-            .map((o) => o.id)
-            .filter(Boolean) as number[];
-          const optionsToRemove = existingOptions.filter(
-            (o) =>
-              !dtoOptionIds.includes(o.id) && o.id !== question.correctOptionId,
-          );
-          if (optionsToRemove.length > 0) await manager.remove(optionsToRemove);
-
-          finalQuestions.push(question);
         }
 
-        test.questions = finalQuestions;
+        test.grade = grade;
+        test.subject = subject;
+        test.chapter = chapter;
+
+        //  Questions: soft delete + recreate
+        await this.softDeleteQuestions(manager, test.questions);
+        await this.createQuestions(manager, test, questions);
+
+        await manager.save(test);
+
+        return {
+          message: 'Subject test updated successfully',
+          data: test,
+        };
       }
 
-      await manager.save(test);
+      // ENTRY TEST WITHOUT DIVISIONS
+      if (isEntryTest && (!divisions || divisions.length === 0)) {
+        if (!questions?.length)
+          throw new BadRequestException(
+            'Entry tests without divisions must have at least one question',
+          );
+        if (gradeId || subjectId)
+          throw new BadRequestException(
+            'gradeId and subjectId are not allowed for entry tests',
+          );
 
-      // Return updated test with relations
-      const updatedTest = await manager.findOne(Test, {
-        where: { id: test.id },
-        relations: [
-          'category',
-          'gradeSubject',
-          'gradeSubject.grade',
-          'gradeSubject.subject',
-          'chapter',
-          'questions',
-          'questions.options',
-        ],
-      });
+        test.grade = undefined;
+        test.subject = undefined;
+        test.chapter = undefined;
 
-      return {
-        message: 'Test updated successfully',
-        data: updatedTest,
-      };
+        await this.softDeleteQuestions(manager, test.questions);
+        await this.createQuestions(manager, test, questions);
+
+        await manager.save(test);
+
+        return {
+          message: 'Entry test (without divisions) updated successfully',
+          data: test,
+        };
+      }
+
+      // ENTRY TEST WITH DIVISIONS
+      if (isEntryTest && divisions && divisions.length > 0) {
+        if (questions?.length)
+          throw new BadRequestException(
+            'Parent questions are not allowed for entry tests with divisions',
+          );
+        if (gradeId || subjectId)
+          throw new BadRequestException(
+            'gradeId and subjectId are not allowed for entry tests with divisions',
+          );
+
+        test.grade = undefined;
+        test.subject = undefined;
+        test.chapter = undefined;
+
+        // Soft-delete parent questions
+        await this.softDeleteQuestions(manager, test.questions);
+
+        for (const divDto of divisions) {
+          if (!divDto.id)
+            throw new BadRequestException('Division id is required for update');
+
+          const existingDivision = test.divisions?.find(
+            (d) => d.id === divDto.id,
+          );
+
+          if (!existingDivision) {
+            throw new NotFoundException(
+              `Division with ID ${divDto.id} not found`,
+            );
+          }
+
+          // UPDATE DIVISION FIELDS
+          if (divDto.title !== undefined) existingDivision.title = divDto.title;
+
+          if (divDto.total_questions !== undefined)
+            existingDivision.total_questions = divDto.total_questions;
+
+          if (divDto.duration_minutes !== undefined)
+            existingDivision.total_duration = divDto.duration_minutes;
+
+          // SUBJECT
+          if (!divDto.subjectId)
+            throw new BadRequestException(
+              'Each division must have a subjectId',
+            );
+
+          const subject = await manager.findOne(Subject, {
+            where: { id: divDto.subjectId },
+          });
+
+          if (!subject)
+            throw new NotFoundException(
+              `Subject with ID ${divDto.subjectId} not found`,
+            );
+
+          existingDivision.subject = subject;
+
+          // QUESTIONS: SOFT DELETE + RECREATE
+          await this.softDeleteQuestions(manager, existingDivision.questions);
+
+          if (!divDto.questions?.length)
+            throw new BadRequestException(
+              'Each division must have at least one question',
+            );
+
+          await this.createQuestions(
+            manager,
+            existingDivision,
+            divDto.questions,
+          );
+
+          await manager.save(existingDivision);
+        }
+
+        await manager.save(test);
+
+        return {
+          message: 'Entry test (with divisions) updated successfully',
+          data: test,
+        };
+      }
+
+      throw new BadRequestException('Invalid request body for test update');
     });
+  }
+
+  private async softDeleteQuestions(
+    manager: EntityManager,
+    questions?: Question[],
+  ) {
+    if (!questions?.length) return;
+
+    for (const q of questions) {
+      if (q.options?.length) {
+        for (const opt of q.options) {
+          opt.deletedAt = new Date();
+          await manager.save(opt);
+        }
+      }
+      q.deletedAt = new Date();
+      await manager.save(q);
+    }
   }
 
   async remove(id: number) {

@@ -9,6 +9,7 @@ import {
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { Test } from '../../tests/entities/test.entity';
 
 @Entity('grades')
 export class Grade {
@@ -32,4 +33,7 @@ export class Grade {
 
   @OneToMany(() => GradeSubject, (gs) => gs.grade)
   gradeSubjects: GradeSubject[];
+
+  @OneToMany(() => Test, (test) => test.grade)
+  tests: Test[];
 }
