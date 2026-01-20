@@ -14,9 +14,9 @@ async function createAdmin() {
     const adminPassword = process.env.ADMIN_PASSWORD;
     const adminEmail = process.env.ADMIN_EMAIL;
 
-    if (!adminPhone || !adminPassword) {
+    if (!adminPhone || !adminPassword || !adminEmail) {
       console.error(
-        'ADMIN_PHONE and ADMIN_PASSWORD must be set in environment variables'
+        'ADMIN_PHONE, ADMIN_PASSWORD and ADMIN_EMAIL must be set in environment variables'
       );
       process.exit(1);
     }

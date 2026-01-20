@@ -12,6 +12,7 @@ import { User } from 'src/user/entities/user.entity';
 import { TestAttempt } from './entities/test_attempt.entity';
 import { UserAnswer } from './entities/user_answers.entity';
 import { AttemptedQuestion } from './entities/attempted_questions.entity';
+import { Grade } from 'src/grades/entities/grade.entity';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AttemptedQuestion } from './entities/attempted_questions.entity';
       Chapter,
       GradeSubject,
       User,
+      Grade,
       TestAttempt,
       UserAnswer,
       AttemptedQuestion,

@@ -31,7 +31,7 @@ export interface JwtPayload {
   exp?: number;
 }
 
-interface RequestWithUser extends Request {
+export interface RequestWithUser extends Request {
   user?: AuthUser;
 }
 
@@ -60,7 +60,12 @@ export class AuthGuard implements CanActivate {
     let user!: AuthUser;
 
     try {
-      const decoded = jwt.verify(token, process.env.APP_SECRET!) as JwtPayload;
+      const secret = process.env.APP_SECRET;
+      if (!secret)
+        throw new UnauthorizedException(
+          'Server misconfiguration: APP_SECRET not set'
+        );
+      const decoded = jwt.verify(token, secret) as JwtPayload;
       const dbUser = await this.userRepo.findOneBy({ id: decoded.id });
       if (!dbUser) throw new UnauthorizedException('User not found');
 

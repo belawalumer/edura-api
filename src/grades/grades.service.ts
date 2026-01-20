@@ -7,7 +7,7 @@ import { UpdateGradeDto } from './dto/update-grade.dto';
 import { PaginationQueryDto } from '../common/dto';
 import { GradeSubject } from 'src/grade-subjects/entities/grade-subject.entity';
 import { Subject } from 'src/subjects/entities/subject.entity';
-import { Status } from 'src/common/enums';
+import { Status, UserRole } from 'src/common/enums';
 
 @Injectable()
 export class GradesService {
@@ -45,7 +45,7 @@ export class GradesService {
     };
   }
 
-  async findAll(query: PaginationQueryDto) {
+  async findAll(query: PaginationQueryDto, role: UserRole) {
     const { page = 1, limit = 10, search } = query;
 
     const qb = this.gradeRepo
@@ -55,6 +55,10 @@ export class GradesService {
       .orderBy('grade.id', 'ASC')
       .skip((page - 1) * limit)
       .take(limit);
+
+    if (role === UserRole.USER) {
+      qb.andWhere('grade.status = :status', { status: 'active' });
+    }
 
     if (search) {
       qb.where('grade.name ILIKE :search', { search: `%${search}%` });

@@ -19,7 +19,14 @@ import { CreateDivisionDto } from './dto/create-division-dto';
 import { AttemptedQuestion } from './entities/attempted_questions.entity';
 import { TestAttempt } from './entities/test_attempt.entity';
 import { UserAnswer } from './entities/user_answers.entity';
-import { TestStatus } from 'src/common/enums';
+import {
+  CategoryName,
+  CategoryType,
+  EntryType,
+  Status,
+  TestStatus,
+} from 'src/common/enums';
+import { RawTestResult, TestDetails } from './dto/get-test-dto';
 
 @Injectable()
 export class TestsService {
@@ -33,7 +40,9 @@ export class TestsService {
     @InjectRepository(UserAnswer)
     private readonly userAnswerRepo: Repository<UserAnswer>,
     @InjectRepository(Question)
-    private readonly questionRepo: Repository<Question>
+    private readonly questionRepo: Repository<Question>,
+    @InjectRepository(Grade)
+    private readonly gradeRepo: Repository<Grade>
   ) {}
 
   async create(createTestDto: CreateTestDto) {
@@ -57,9 +66,9 @@ export class TestsService {
       if (!category)
         throw new NotFoundException(`Category with ID ${categoryId} not found`);
 
-      const categoryName = category.name.toLowerCase();
-      const isEntryTest = categoryName === 'entry tests';
-      const isSubjectTest = categoryName === 'subject tests';
+      const categoryName = category.name.toLowerCase() as CategoryName;
+      const isEntryTest = categoryName === CategoryName.ENTRY_TEST;
+      const isSubjectTest = categoryName === CategoryName.SUBJECT_TEST;
 
       // SUBJECT TEST VALIDATION
       if (isSubjectTest) {
@@ -379,6 +388,195 @@ export class TestsService {
     return { message: 'Test deleted successfully' };
   }
 
+  //Test Attempt API'S
+
+  async getTests(filters: {
+    type: CategoryType;
+    gradeId?: number;
+    entryType?: EntryType;
+  }) {
+    // SUBJECT TESTS
+    if (filters.type === CategoryType.SUBJECT_TEST) {
+      if (!filters.gradeId) {
+        throw new BadRequestException('gradeId is required for subject tests');
+      }
+
+      const grade: Grade | null = await this.gradeRepo.findOne({
+        where: { id: filters.gradeId },
+        relations: ['gradeSubjects', 'gradeSubjects.subject'],
+      });
+
+      if (!grade) throw new NotFoundException('Grade not found');
+
+      const subjects = grade.gradeSubjects
+        .filter((gs) => gs.subject.status === Status.ACTIVE)
+        .map((gs) => ({
+          id: gs.subject.id,
+          name: gs.subject.name,
+          status: gs.subject.status,
+        }));
+
+      return {
+        data: subjects,
+      };
+    }
+
+    // ENTRY TESTS
+    if (filters.type === CategoryType.ENTRY_TEST) {
+      const query = this.testRepo
+        .createQueryBuilder('academic_tests')
+        .leftJoin('academic_tests.category', 'category')
+        .leftJoin('academic_tests.parentTest', 'parentTest')
+        .where('LOWER(category.name) = :cat', { cat: CategoryName.ENTRY_TEST })
+        .andWhere('academic_tests.parentTest IS NULL')
+        .andWhere('academic_tests.status = :status', { status: Status.ACTIVE });
+
+      if (filters.entryType === EntryType.WITH_DIVISIONS) {
+        query.andWhere(`
+        EXISTS (
+          SELECT 1 FROM academic_tests child
+          WHERE child.parent_test_id = academic_tests.id
+        )
+      `);
+      }
+
+      if (filters.entryType === EntryType.WITHOUT_DIVISIONS) {
+        query.andWhere(`
+        NOT EXISTS (
+          SELECT 1 FROM academic_tests child
+          WHERE child.parent_test_id = academic_tests.id
+        )
+      `);
+      }
+
+      const tests = await query.getMany();
+      return {
+        data: tests,
+      };
+    }
+  }
+
+  async getAllTestsByGradeAndSubject(
+    gradeId: number,
+    subjectId: number,
+    filter?: TestStatus
+  ) {
+    if (!gradeId || !subjectId) {
+      throw new BadRequestException('Both gradeId and subjectId are required');
+    }
+
+    const query = this.testRepo
+      .createQueryBuilder('test')
+      .leftJoin('test_attempts', 'attempt', 'attempt.test_id = test.id')
+      .where('test.grade_id = :gradeId', { gradeId })
+      .andWhere('test.subject_id = :subjectId', { subjectId })
+      .andWhere('test.status = :status', { status: Status.ACTIVE });
+
+    if (filter) {
+      query.andWhere('attempt.status = :attemptStatus', {
+        attemptStatus: filter,
+      });
+    }
+
+    const tests = await query
+      .select([
+        'test.id AS id',
+        'test.title AS title',
+        'test.total_questions AS total_questions',
+        'test.total_duration AS total_duration',
+        `
+      CASE
+        WHEN attempt.status = 'in_progress' THEN 'in_progress'
+        WHEN attempt.status = 'completed' THEN 'completed'
+        ELSE 'active'
+      END AS status
+      `,
+      ])
+      .orderBy('test.id', 'ASC')
+      .getRawMany<RawTestResult>();
+
+    return {
+      data: tests.map((t) => ({
+        id: t.id,
+        title: t.title,
+        total_questions: Number(t.total_questions),
+        total_duration: Number(t.total_duration),
+        status: t.status,
+      })),
+    };
+  }
+
+  async getTestById(
+    testId: number,
+    userId?: number
+  ): Promise<{ data: TestDetails }> {
+    const test = await this.testRepo.findOne({
+      where: { id: testId },
+      relations: ['category', 'parentTest', 'divisions'],
+    });
+
+    if (!test) throw new NotFoundException('Test not found');
+
+    let status: 'active' | 'in_progress' | 'completed' = 'active';
+
+    if (userId) {
+      const attempt = await this.testAttemptRepo.findOne({
+        where: { test: { id: testId }, user_id: userId },
+      });
+
+      if (attempt) {
+        if (attempt.status === TestStatus.IN_PROGRESS)
+          status = TestStatus.IN_PROGRESS;
+        else if (attempt.status === TestStatus.COMPLETED)
+          status = TestStatus.COMPLETED;
+      }
+    }
+
+    const testDetails: TestDetails = {
+      id: test.id,
+      title: test.title,
+      total_questions: test.total_questions,
+      total_duration: test.total_duration,
+      status,
+    };
+
+    // If Entry Test with divisions
+    const isEntryTest =
+      test.category.name.toLowerCase() ===
+      CategoryName.ENTRY_TEST.toLowerCase();
+
+    if (isEntryTest && test.divisions && test.divisions.length > 0) {
+      const divisionPromises = test.divisions.map(async (division) => {
+        let divStatus: 'active' | 'in_progress' | 'completed' = 'active';
+
+        if (userId) {
+          const attempt = await this.testAttemptRepo.findOne({
+            where: { test: { id: division.id }, user_id: userId },
+          });
+
+          if (attempt) {
+            if (attempt.status === TestStatus.IN_PROGRESS)
+              divStatus = TestStatus.IN_PROGRESS;
+            else if (attempt.status === TestStatus.COMPLETED)
+              divStatus = TestStatus.COMPLETED;
+          }
+        }
+
+        return {
+          id: division.id,
+          title: division.title,
+          total_questions: division.total_questions,
+          total_duration: division.total_duration,
+          status: divStatus,
+        };
+      });
+
+      testDetails.divisions = await Promise.all(divisionPromises);
+    }
+
+    return { data: testDetails };
+  }
+
   async startTest(authUserId: number, test_id: number, page = 1, limit = 10) {
     // Check if there is an IN_PROGRESS attempt
     const inProgressAttempt = await this.testAttemptRepo.findOne({
@@ -549,18 +747,6 @@ export class TestsService {
 
     const validQuestionIds = attempt.test.questions.map((q) => q.id);
 
-    // Validate skipped questions
-    const skippedQuestions = answers.filter(
-      (ans) =>
-        ans.selected_option_id === null || ans.selected_option_id === undefined
-    );
-
-    if (skippedQuestions.length > 0) {
-      throw new BadRequestException(
-        'You cannot skip a question. Please answer all questions before proceeding.'
-      );
-    }
-
     // Validate that all submitted questions belong to this test
     const invalidQuestions = answers.filter(
       (ans) => !validQuestionIds.includes(ans.question_id)
@@ -717,6 +903,8 @@ export class TestsService {
       relations: ['question'],
     });
 
+    const NEGATIVE_MARKS = Number(process.env.NEGATIVE_MARKS ?? 0);
+
     let marks = 0;
     let total_correct = 0;
     let total_wrong = 0;
@@ -727,7 +915,7 @@ export class TestsService {
         marks++;
       } else {
         total_wrong++;
-        marks -= 0.25;
+        marks -= NEGATIVE_MARKS;
       }
     }
 

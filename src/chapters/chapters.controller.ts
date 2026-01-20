@@ -16,6 +16,7 @@ import { UpdateChapterDto } from './dto/update-chapter.dto';
 import { PaginationQueryDto } from 'src/common/dto';
 import { AuthGuard } from 'src/auth/guard/auth_guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
+import { UserRole } from 'src/common/enums';
 
 @UseGuards(AuthGuard)
 @Controller('chapters')
@@ -23,19 +24,19 @@ export class ChaptersController {
   constructor(private readonly chaptersService: ChaptersService) {}
 
   @Post()
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   create(@Body() createChapterDto: CreateChapterDto) {
     return this.chaptersService.create(createChapterDto);
   }
 
   @Get()
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   findAll(@Query() query: PaginationQueryDto) {
     return this.chaptersService.findAll(query);
   }
 
   @Get('by-grade-subject')
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   getChaptersByGradeAndSubject(
     @Query('gradeId', ParseIntPipe) gradeId: number,
     @Query('subjectId', ParseIntPipe) subjectId: number
@@ -44,7 +45,7 @@ export class ChaptersController {
   }
 
   @Patch(':id')
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateChapterDto: UpdateChapterDto
@@ -53,7 +54,7 @@ export class ChaptersController {
   }
 
   @Delete(':id')
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.chaptersService.remove(id);
   }

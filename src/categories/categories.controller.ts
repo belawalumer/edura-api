@@ -16,6 +16,7 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 import { AuthGuard } from 'src/auth/guard/auth_guard';
 import { PaginationQueryDto } from '../common/dto/index';
 import { Roles } from 'src/auth/decorators/roles.decorator';
+import { UserRole } from 'src/common/enums';
 
 @UseGuards(AuthGuard)
 @Controller('categories')
@@ -23,19 +24,19 @@ export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Post()
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   async create(@Body() createCategoryDto: CreateCategoryDto) {
     return await this.categoriesService.create(createCategoryDto);
   }
 
   @Get()
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   async findAll(@Query() query: PaginationQueryDto) {
     return await this.categoriesService.findAll(query);
   }
 
   @Patch(':id')
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateCategoryDto: UpdateCategoryDto
@@ -44,7 +45,7 @@ export class CategoriesController {
   }
 
   @Delete(':id')
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   async remove(@Param('id', ParseIntPipe) id: number) {
     return await this.categoriesService.remove(id);
   }
