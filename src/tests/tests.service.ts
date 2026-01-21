@@ -827,18 +827,6 @@ export class TestsService {
       throw new BadRequestException('Test has already been submitted.');
     }
 
-    // Validate skipped questions
-    const skippedQuestions = answers.filter(
-      (ans) =>
-        ans.selected_option_id === null || ans.selected_option_id === undefined
-    );
-
-    if (skippedQuestions.length > 0) {
-      throw new BadRequestException(
-        'You cannot skip a question. Please answer all questions before proceeding.'
-      );
-    }
-
     // Validate questions belong to test
     const validQuestionIds = new Set(attempt.test.questions.map((q) => q.id));
 
@@ -862,23 +850,16 @@ export class TestsService {
     );
 
     // Allow ONLY unanswered questions
-    const newAnswers = answers.filter(
-      (ans) => !alreadyAnsweredQuestionIds.has(ans.question_id)
-    );
-
-    if (newAnswers.length > 0) {
-      const entities = newAnswers.map((ans) => {
+    const newAnswers = answers
+      .filter((ans) => !alreadyAnsweredQuestionIds.has(ans.question_id))
+      .map((ans) => {
         const question = attempt.test.questions.find(
           (q) => q.id === ans.question_id
-        );
+        )!;
 
-        if (!question) {
-          throw new BadRequestException(
-            `Invalid question id ${ans.question_id}`
-          );
-        }
-
-        const isCorrect = question.correctOptionId === ans.selected_option_id;
+        const isCorrect =
+          ans.selected_option_id !== null &&
+          question.correctOptionId === ans.selected_option_id;
 
         return this.userAnswerRepo.create({
           testAttempt: attempt,
@@ -888,7 +869,8 @@ export class TestsService {
         });
       });
 
-      await this.userAnswerRepo.save(entities);
+    if (newAnswers.length > 0) {
+      await this.userAnswerRepo.save(newAnswers);
     }
 
     if (remaining_duration !== undefined) {
@@ -901,17 +883,20 @@ export class TestsService {
       relations: ['question'],
     });
 
-    if (allAnswers.length !== attempt.test.questions.length) {
-      throw new BadRequestException(
-        'All questions must be answered before submitting.'
-      );
-    }
-
     const NEGATIVE_MARKS = Number(process.env.NEGATIVE_MARKS ?? 0);
 
     let marks = 0;
     let total_correct = 0;
     let total_wrong = 0;
+
+    // Count unanswered questions as wrong
+    const answeredQuestionIds = new Set(allAnswers.map((a) => a.question.id));
+    const unansweredQuestions = attempt.test.questions.filter(
+      (q) => !answeredQuestionIds.has(q.id)
+    );
+
+    total_wrong += unansweredQuestions.length;
+    marks -= unansweredQuestions.length * NEGATIVE_MARKS;
 
     for (const ua of allAnswers) {
       if (ua.isCorrect) {
@@ -944,6 +929,7 @@ export class TestsService {
         answered: allAnswers.length,
         remaining_duration: attempt.remaining_duration,
         total_questions: attempt.test.questions.length,
+        unanswered: unansweredQuestions.length,
       },
     };
   }

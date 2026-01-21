@@ -13,6 +13,7 @@ import * as jwt from 'jsonwebtoken';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserRole } from 'src/common/enums';
+import { generateRefreshToken } from '../helpers/token.helper';
 
 export interface AuthUser {
   id?: number;
@@ -96,6 +97,7 @@ export class AuthGuard implements CanActivate {
             image: data.user.user_metadata?.avatar_url
               ? String(data.user.user_metadata.avatar_url)
               : undefined,
+            refreshToken: generateRefreshToken(),
           });
           await this.userRepo.save(dbUser);
         }
