@@ -92,8 +92,10 @@ export class AuthGuard implements CanActivate {
             email,
             role: UserRole.USER,
             phone: data.user.phone,
-            name: (data.user.user_metadata?.full_name || email) as string,
-            image: (data.user.user_metadata?.avatar_url || undefined) as string,
+            name: String(data.user.user_metadata?.full_name || email),
+            image: data.user.user_metadata?.avatar_url
+              ? String(data.user.user_metadata.avatar_url)
+              : undefined,
           });
           await this.userRepo.save(dbUser);
         }

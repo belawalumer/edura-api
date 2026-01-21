@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Grade } from './entities/grade.entity';
@@ -28,9 +32,9 @@ export class GradesService {
     });
 
     if (existingGrade) {
-      return {
-        message: `Grade with name ${name} already exists in this category`,
-      };
+      throw new ConflictException(
+        `Grade with name ${name} already exists in this category`
+      );
     }
 
     const grade = this.gradeRepo.create({

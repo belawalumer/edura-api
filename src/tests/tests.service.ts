@@ -390,7 +390,7 @@ export class TestsService {
 
   //Test Attempt API'S
 
-  async getTests(filters: {
+  async getSubjectsForGrade(filters: {
     type: CategoryType;
     gradeId?: number;
     entryType?: EntryType;
@@ -866,35 +866,33 @@ export class TestsService {
       (ans) => !alreadyAnsweredQuestionIds.has(ans.question_id)
     );
 
-    if (newAnswers.length === 0) {
-      return {
-        message: 'These questions have already been submitted.',
-        remaining_duration: attempt.remaining_duration,
-      };
+    if (newAnswers.length > 0) {
+      const entities = newAnswers.map((ans) => {
+        const question = attempt.test.questions.find(
+          (q) => q.id === ans.question_id
+        );
+
+        if (!question) {
+          throw new BadRequestException(
+            `Invalid question id ${ans.question_id}`
+          );
+        }
+
+        const isCorrect = question.correctOptionId === ans.selected_option_id;
+
+        return this.userAnswerRepo.create({
+          testAttempt: attempt,
+          question,
+          selected_option_id: ans.selected_option_id,
+          isCorrect,
+        });
+      });
+
+      await this.userAnswerRepo.save(entities);
     }
 
     if (remaining_duration !== undefined) {
       attempt.remaining_duration = remaining_duration;
-    }
-
-    // Save ONLY new answers
-    for (const ans of newAnswers) {
-      const question = attempt.test.questions.find(
-        (q) => q.id === ans.question_id
-      );
-
-      if (!question) continue;
-
-      const isCorrect = question.correctOptionId === ans.selected_option_id;
-
-      const userAnswer = this.userAnswerRepo.create({
-        testAttempt: attempt,
-        question,
-        selected_option_id: ans.selected_option_id,
-        isCorrect,
-      });
-
-      await this.userAnswerRepo.save(userAnswer);
     }
 
     // Calculate result from ALL answers
@@ -902,6 +900,12 @@ export class TestsService {
       where: { testAttempt: { id: attempt.id } },
       relations: ['question'],
     });
+
+    if (allAnswers.length !== attempt.test.questions.length) {
+      throw new BadRequestException(
+        'All questions must be answered before submitting.'
+      );
+    }
 
     const NEGATIVE_MARKS = Number(process.env.NEGATIVE_MARKS ?? 0);
 

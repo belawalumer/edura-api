@@ -55,7 +55,7 @@ export class TestsController {
     @Query('gradeId', ParseIntPipe) gradeId?: number,
     @Query('entryType') entryType?: EntryType
   ) {
-    return this.testsService.getTests({ type, gradeId, entryType });
+    return this.testsService.getSubjectsForGrade({ type, gradeId, entryType });
   }
 
   @Get('grade-subject')
