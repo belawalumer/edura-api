@@ -1,26 +1,71 @@
-import { Injectable } from '@nestjs/common';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { User } from '../user/entities/user.entity';
+import { generateToken } from './helpers/token.helper';
+import * as bcrypt from 'bcrypt';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 
 @Injectable()
 export class AuthService {
-  create(createAuthDto: CreateAuthDto) {
-    return 'This action adds a new auth';
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>
+  ) {}
+
+  async login(phone: string, password: string) {
+    if (phone) {
+      phone = phone.trim().replace(/\s+/g, '');
+    }
+
+    if (!phone || !password) {
+      throw new BadRequestException('Phone and password are required');
+    }
+
+    const passwordRegex = /^\d{6,8}$/;
+    if (!passwordRegex.test(password)) {
+      throw new BadRequestException('Password must be 6 to 8 digits');
+    }
+
+    const user = await this.userRepo.findOne({ where: { phone } });
+    if (!user) throw new UnauthorizedException('Invalid credentials');
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid)
+      throw new UnauthorizedException('Invalid credentials');
+
+    const accessToken = generateToken(user);
+
+    return {
+      accessToken,
+      refreshToken: user.refreshToken,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        role: user.role,
+        email: user.email,
+        name: user.name,
+      },
+    };
   }
 
-  findAll() {
-    return `This action returns all auth`;
-  }
+  async refreshToken(refreshToken: string) {
+    if (!refreshToken) {
+      throw new BadRequestException('Refresh token required');
+    }
 
-  findOne(id: number) {
-    return `This action returns a #${id} auth`;
-  }
+    const user = await this.userRepo.findOne({ where: { refreshToken } });
 
-  update(id: number, updateAuthDto: UpdateAuthDto) {
-    return `This action updates a #${id} auth`;
-  }
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
 
-  remove(id: number) {
-    return `This action removes a #${id} auth`;
+    const accessToken = generateToken(user);
+
+    return { accessToken };
   }
 }

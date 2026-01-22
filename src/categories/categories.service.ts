@@ -1,32 +1,41 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Category } from './entities/category.entity';
 import { Repository } from 'typeorm';
 import { PaginationQueryDto } from '../common/dto/index';
+import { Status } from 'src/common/enums';
 
 @Injectable()
 export class CategoriesService {
   constructor(
     @InjectRepository(Category)
-    private readonly categoryRepo: Repository<Category>,
+    private readonly categoryRepo: Repository<Category>
   ) {}
 
   async create(createCategoryDto: CreateCategoryDto) {
-    const { title } = createCategoryDto;
+    const { name, status } = createCategoryDto;
 
     const existingCategory = await this.categoryRepo.findOne({
-      where: { title },
+      where: { name },
     });
 
     if (existingCategory) {
-      return {
-        message: `Category with title ${title} already exists`,
-      };
+      throw new ConflictException(
+        `Category with name "${name}" already exists`
+      );
     }
 
-    const category = this.categoryRepo.create(createCategoryDto);
+    const category = this.categoryRepo.create({
+      ...createCategoryDto,
+      status: status || Status.ACTIVE,
+    });
+
     const savedCategory = await this.categoryRepo.save(category);
     return {
       message: 'Category created successfully',
@@ -44,7 +53,7 @@ export class CategoriesService {
       .take(limit);
 
     if (search) {
-      qb.where('category.title ILIKE :search', { search: `%${search}%` });
+      qb.where('category.name ILIKE :search', { search: `%${search}%` });
     }
 
     qb.orderBy('category.id', 'ASC');
@@ -85,6 +94,6 @@ export class CategoriesService {
     if (result.affected === 0) {
       throw new NotFoundException(`Category with ID ${id} not found`);
     }
-    return { message: 'Category deleted successfully' };
+    return { message: 'Category deleted successfully', data: null };
   }
 }

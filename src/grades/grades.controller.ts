@@ -8,12 +8,17 @@ import {
   Delete,
   Query,
   UseGuards,
+  ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { GradesService } from './grades.service';
 import { CreateGradeDto } from './dto/create-grade.dto';
 import { UpdateGradeDto } from './dto/update-grade.dto';
 import { PaginationQueryDto } from 'src/common/dto';
 import { AuthGuard } from 'src/auth/guard/auth_guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { UserRole } from 'src/common/enums';
+import type { RequestWithUser } from 'src/auth/guard/auth_guard';
 
 @UseGuards(AuthGuard)
 @Controller('grades')
@@ -21,27 +26,30 @@ export class GradesController {
   constructor(private readonly gradesService: GradesService) {}
 
   @Post()
+  @Roles(UserRole.ADMIN)
   create(@Body() createGradeDto: CreateGradeDto) {
     return this.gradesService.create(createGradeDto);
   }
 
   @Get()
-  findAll(@Query() query: PaginationQueryDto) {
-    return this.gradesService.findAll(query);
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.gradesService.findOne(+id);
+  @Roles(UserRole.ADMIN, UserRole.USER)
+  findAll(@Query() query: PaginationQueryDto, @Req() req: RequestWithUser) {
+    const role = (req.user?.role as UserRole) ?? UserRole.USER;
+    return this.gradesService.findAll(query, role);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateGradeDto: UpdateGradeDto) {
-    return this.gradesService.update(+id, updateGradeDto);
+  @Roles(UserRole.ADMIN)
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateGradeDto: UpdateGradeDto
+  ) {
+    return this.gradesService.update(id, updateGradeDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.gradesService.remove(+id);
+  @Roles(UserRole.ADMIN)
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.gradesService.remove(id);
   }
 }

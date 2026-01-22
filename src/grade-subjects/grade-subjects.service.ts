@@ -7,7 +7,7 @@ import { GradeSubject } from './entities/grade-subject.entity';
 export class GradeSubjectsService {
   constructor(
     @InjectRepository(GradeSubject)
-    private readonly gradeSubjectRepo: Repository<GradeSubject>,
+    private readonly gradeSubjectRepo: Repository<GradeSubject>
   ) {}
 
   async findByGrade(gradeId: number) {

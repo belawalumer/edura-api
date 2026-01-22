@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Grade } from './entities/grade.entity';
@@ -7,6 +11,7 @@ import { UpdateGradeDto } from './dto/update-grade.dto';
 import { PaginationQueryDto } from '../common/dto';
 import { GradeSubject } from 'src/grade-subjects/entities/grade-subject.entity';
 import { Subject } from 'src/subjects/entities/subject.entity';
+import { Status, UserRole } from 'src/common/enums';
 
 @Injectable()
 export class GradesService {
@@ -16,55 +21,68 @@ export class GradesService {
     @InjectRepository(GradeSubject)
     private readonly gradeSubjectRepo: Repository<GradeSubject>,
     @InjectRepository(Subject)
-    private readonly subjectRepo: Repository<Subject>,
+    private readonly subjectRepo: Repository<Subject>
   ) {}
 
   async create(createGradeDto: CreateGradeDto) {
-    const { name, categoryId } = createGradeDto;
+    const { name, status } = createGradeDto;
 
     const existingGrade = await this.gradeRepo.findOne({
-      where: { name, category: { id: categoryId } },
+      where: { name },
     });
 
     if (existingGrade) {
-      return {
-        message: `Grade with name ${name} already exists in this category`,
-      };
+      throw new ConflictException(
+        `Grade with name ${name} already exists in this category`
+      );
     }
 
     const grade = this.gradeRepo.create({
       ...createGradeDto,
-      category: { id: categoryId },
+      status: status || Status.ACTIVE,
     });
 
     const savedGrade = await this.gradeRepo.save(grade);
-
     return {
       message: 'Grade created successfully',
       data: savedGrade,
     };
   }
 
-  async findAll(query: PaginationQueryDto) {
+  async findAll(query: PaginationQueryDto, role: UserRole) {
     const { page = 1, limit = 10, search } = query;
 
     const qb = this.gradeRepo
       .createQueryBuilder('grade')
-      .leftJoinAndSelect('grade.category', 'category')
+      .leftJoinAndSelect('grade.gradeSubjects', 'gradeSubject')
+      .leftJoinAndSelect('gradeSubject.subject', 'subject')
       .orderBy('grade.id', 'ASC')
       .skip((page - 1) * limit)
       .take(limit);
+
+    if (role === UserRole.USER) {
+      qb.andWhere('grade.status = :status', { status: 'active' });
+    }
 
     if (search) {
       qb.where('grade.name ILIKE :search', { search: `%${search}%` });
     }
 
-    const [items, total] = await qb.getManyAndCount();
+    const [grades, total] = await qb.getManyAndCount();
 
     return {
       message: 'Grades retrieved successfully',
       data: {
-        items,
+        items: grades.map((grade) => ({
+          id: grade.id,
+          name: grade.name,
+          status: grade.status,
+          subjects: grade.gradeSubjects.map((gs) => ({
+            id: gs.subject.id,
+            name: gs.subject.name,
+            status: gs.subject.status,
+          })),
+        })),
         meta: {
           total,
           page,
@@ -76,64 +94,58 @@ export class GradesService {
     };
   }
 
-  async findOne(id: number) {
+  async update(id: number, updateGradeDto: UpdateGradeDto) {
     const grade = await this.gradeRepo.findOne({
       where: { id },
-      relations: ['category'],
     });
 
     if (!grade) {
       throw new NotFoundException(`Grade with ID ${id} not found`);
     }
 
-    return {
-      message: 'Grade retrieved successfully',
-      data: grade,
-    };
-  }
-
-  async update(id: number, updateGradeDto: UpdateGradeDto) {
-    const grade = await this.gradeRepo.findOne({ where: { id } });
-    if (!grade) {
-      throw new NotFoundException(`Grade with ID ${id} not found`);
-    }
-
     Object.assign(grade, updateGradeDto);
-    const updatedGrade = await this.gradeRepo.save(grade);
+    await this.gradeRepo.save(grade);
 
-    // Handle subject assignments if subjectIds are provided
     if (updateGradeDto.subjectIds) {
-      const subjects = await this.subjectRepo.findByIds(
-        updateGradeDto.subjectIds,
-      );
-
-      //Remove old ones not in a new list
-      const existingMappings = await this.gradeSubjectRepo.find({
-        where: { grade: { id: grade.id } },
-        relations: ['subject'],
+      await this.gradeSubjectRepo.delete({
+        grade: { id },
       });
 
-      for (const mapping of existingMappings) {
-        if (!updateGradeDto.subjectIds.includes(mapping.subject.id)) {
-          await this.gradeSubjectRepo.remove(mapping);
-        }
-      }
+      const subjects = await this.subjectRepo.findByIds(
+        updateGradeDto.subjectIds
+      );
 
-      // Add new mappings
-      for (const subject of subjects) {
-        const exists = await this.gradeSubjectRepo.findOne({
-          where: { grade: { id: grade.id }, subject: { id: subject.id } },
-        });
-        if (!exists) {
-          const mapping = this.gradeSubjectRepo.create({ grade, subject });
-          await this.gradeSubjectRepo.save(mapping);
-        }
-      }
+      const mappings = subjects.map((subject) =>
+        this.gradeSubjectRepo.create({
+          grade,
+          subject,
+        })
+      );
+
+      await this.gradeSubjectRepo.save(mappings);
+    }
+
+    const updatedGrade = await this.gradeRepo.findOne({
+      where: { id },
+      relations: ['gradeSubjects', 'gradeSubjects.subject'],
+    });
+
+    if (!updatedGrade) {
+      throw new NotFoundException(`Grade with ID ${id} not found`);
     }
 
     return {
       message: 'Grade updated successfully',
-      data: updatedGrade,
+      data: {
+        id: updatedGrade.id,
+        name: updatedGrade.name,
+        status: updatedGrade.status,
+        subjects: updatedGrade.gradeSubjects.map((gs) => ({
+          id: gs.subject.id,
+          name: gs.subject.name,
+          status: gs.subject.status,
+        })),
+      },
     };
   }
 

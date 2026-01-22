@@ -5,7 +5,6 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
-  DeleteDateColumn,
 } from 'typeorm';
 import { Test } from '../../tests/entities/test.entity';
 import { Option } from './option.entity';
@@ -27,7 +26,4 @@ export class Question {
 
   @Column({ name: 'correct_option_id', type: 'int', nullable: true })
   correctOptionId: number | null;
-
-  @DeleteDateColumn({ name: 'deleted_at', nullable: true })
-  deletedAt?: Date;
 }

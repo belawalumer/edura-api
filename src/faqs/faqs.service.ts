@@ -9,7 +9,7 @@ import { UpdateFaqDto } from './dto/update-faq.dto';
 export class FaqsService {
   constructor(
     @InjectRepository(Faq)
-    private readonly faqRepo: Repository<Faq>,
+    private readonly faqRepo: Repository<Faq>
   ) {}
 
   async create(createDto: CreateFaqDto) {
