@@ -17,6 +17,7 @@ import { PaginationQueryDto } from 'src/common/dto';
 import { AuthGuard } from 'src/auth/guard/auth_guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'src/common/enums';
+import { ApiExcludeEndpoint } from '@nestjs/swagger';
 
 @UseGuards(AuthGuard)
 @Controller('subjects')
@@ -25,6 +26,7 @@ export class SubjectsController {
 
   @Post()
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   create(@Body() createSubjectDto: CreateSubjectDto) {
     return this.subjectsService.create(createSubjectDto);
   }
@@ -37,6 +39,7 @@ export class SubjectsController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateSubjectDto: UpdateSubjectDto
@@ -46,6 +49,7 @@ export class SubjectsController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.subjectsService.remove(id);
   }

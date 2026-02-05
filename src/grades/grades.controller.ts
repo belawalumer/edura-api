@@ -19,6 +19,7 @@ import { AuthGuard } from 'src/auth/guard/auth_guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'src/common/enums';
 import type { RequestWithUser } from 'src/auth/guard/auth_guard';
+import { ApiExcludeEndpoint } from '@nestjs/swagger';
 
 @UseGuards(AuthGuard)
 @Controller('grades')
@@ -27,6 +28,7 @@ export class GradesController {
 
   @Post()
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   create(@Body() createGradeDto: CreateGradeDto) {
     return this.gradesService.create(createGradeDto);
   }
@@ -40,6 +42,7 @@ export class GradesController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateGradeDto: UpdateGradeDto
@@ -49,6 +52,7 @@ export class GradesController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.gradesService.remove(id);
   }

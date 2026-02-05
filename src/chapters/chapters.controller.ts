@@ -17,6 +17,7 @@ import { PaginationQueryDto } from 'src/common/dto';
 import { AuthGuard } from 'src/auth/guard/auth_guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'src/common/enums';
+import { ApiExcludeEndpoint } from '@nestjs/swagger';
 
 @UseGuards(AuthGuard)
 @Controller('chapters')
@@ -25,12 +26,14 @@ export class ChaptersController {
 
   @Post()
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   create(@Body() createChapterDto: CreateChapterDto) {
     return this.chaptersService.create(createChapterDto);
   }
 
   @Get()
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   findAll(@Query() query: PaginationQueryDto) {
     return this.chaptersService.findAll(query);
   }
@@ -46,6 +49,7 @@ export class ChaptersController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateChapterDto: UpdateChapterDto
@@ -55,6 +59,7 @@ export class ChaptersController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.chaptersService.remove(id);
   }
