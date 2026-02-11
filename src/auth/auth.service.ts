@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { User } from '../user/entities/user.entity';
 import { generateToken } from './helpers/token.helper';
@@ -32,15 +31,15 @@ export class AuthService {
     }
 
     const user = await this.userRepo.findOne({ where: { phone } });
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user) throw new BadRequestException('Invalid credentials');
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid)
-      throw new UnauthorizedException('Invalid credentials');
+    if (!isPasswordValid) throw new BadRequestException('Invalid credentials');
 
     const accessToken = generateToken(user);
 
     return {
+      message: 'Login successful',
       accessToken,
       refreshToken: user.refreshToken,
       user: {
@@ -49,6 +48,7 @@ export class AuthService {
         role: user.role,
         email: user.email,
         name: user.name,
+        image: user.image ?? null,
       },
     };
   }
