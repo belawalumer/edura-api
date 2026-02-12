@@ -75,19 +75,16 @@ export class BannersAnnouncementsController {
     @Body() dto: UpdateBannersAnnouncementDto,
     @UploadedFile() file?: Express.Multer.File
   ) {
-    if (!file) {
-      throw new BadRequestException('Image file is required');
+    const bannerData: Partial<UpdateBannersAnnouncementDto> = { ...dto };
+
+    if (file) {
+      const uploaded = await this.cloudinaryService.uploadBuffer(
+        file.buffer,
+        file.originalname
+      );
+
+      bannerData.image = uploaded.secure_url;
     }
-
-    const uploaded = await this.cloudinaryService.uploadBuffer(
-      file.buffer,
-      file.originalname
-    );
-
-    const bannerData = {
-      ...dto,
-      image: uploaded.secure_url,
-    };
 
     return this.bannersAnnouncementsService.update(id, bannerData);
   }

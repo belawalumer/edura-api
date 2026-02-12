@@ -1,4 +1,3 @@
-import { IsNotEmpty } from 'class-validator';
 import { ContentType, Status } from '../../common/enums';
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 
@@ -37,6 +36,5 @@ export class BannersAnnouncement {
   ctaLink?: string;
 
   @Column({ nullable: true })
-  @IsNotEmpty({ message: 'Image is required' })
   image: string;
 }

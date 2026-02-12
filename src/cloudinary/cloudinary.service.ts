@@ -1,6 +1,7 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface CloudinaryUploadResponse {
   secure_url: string;
@@ -35,7 +36,7 @@ export class CloudinaryService {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: 'uploads',
-          public_id: `${Date.now()}-${filename}`,
+          public_id: `${uuidv4()}-${filename}`,
           resource_type: 'image',
         },
         (error: Error | undefined, result?: UploadApiResponse) => {

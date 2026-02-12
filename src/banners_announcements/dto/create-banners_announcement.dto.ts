@@ -31,4 +31,8 @@ export class CreateBannersAnnouncementDto {
   @IsOptional()
   @IsUrl()
   ctaLink?: string;
+
+  @IsOptional()
+  @IsString()
+  image?: string;
 }

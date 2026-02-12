@@ -63,7 +63,7 @@ export class UserController {
       imageUrl = uploaded.secure_url;
     }
 
-    if (!dto && !imageUrl) {
+    if (Object.keys(dto).length === 0 && !imageUrl) {
       throw new BadRequestException('Nothing to update');
     }
 
