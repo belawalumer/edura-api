@@ -55,23 +55,6 @@ export class BannersAnnouncementsService {
     };
   }
 
-  async findOne(id: number) {
-    const content = await this.bannersAnnouncementRepo.findOne({
-      where: { id },
-    });
-
-    if (!content) {
-      throw new NotFoundException(
-        `Banner/Announcement with ID ${id} not found`
-      );
-    }
-
-    return {
-      message: 'Banner/Announcement retrieved successfully',
-      data: content,
-    };
-  }
-
   async update(id: number, updateDto: UpdateBannersAnnouncementDto) {
     const content = await this.bannersAnnouncementRepo.findOne({
       where: { id },

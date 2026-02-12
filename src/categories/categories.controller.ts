@@ -17,6 +17,7 @@ import { AuthGuard } from 'src/auth/guard/auth_guard';
 import { PaginationQueryDto } from '../common/dto/index';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'src/common/enums';
+import { ApiExcludeEndpoint } from '@nestjs/swagger';
 
 @UseGuards(AuthGuard)
 @Controller('categories')
@@ -25,6 +26,7 @@ export class CategoriesController {
 
   @Post()
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   async create(@Body() createCategoryDto: CreateCategoryDto) {
     return await this.categoriesService.create(createCategoryDto);
   }
@@ -37,6 +39,7 @@ export class CategoriesController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateCategoryDto: UpdateCategoryDto
@@ -46,6 +49,7 @@ export class CategoriesController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   async remove(@Param('id', ParseIntPipe) id: number) {
     return await this.categoriesService.remove(id);
   }

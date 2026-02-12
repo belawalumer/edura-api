@@ -4,9 +4,13 @@ import { BannersAnnouncementsController } from './banners_announcements.controll
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BannersAnnouncement } from './entities/banners_announcement.entity';
 import { User } from '../user/entities/user.entity';
+import { CloudinaryModule } from 'src/cloudinary/cloudinary.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([BannersAnnouncement, User])],
+  imports: [
+    TypeOrmModule.forFeature([BannersAnnouncement, User]),
+    CloudinaryModule,
+  ],
   controllers: [BannersAnnouncementsController],
   providers: [BannersAnnouncementsService],
 })

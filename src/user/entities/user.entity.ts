@@ -38,6 +38,12 @@ export class User {
   @Column({ nullable: true })
   refreshToken?: string;
 
+  @Column({ nullable: true })
+  grade?: string;
+
+  @Column({ default: false })
+  isSuspended: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

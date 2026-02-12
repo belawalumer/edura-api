@@ -24,6 +24,7 @@ import {
   TestStatus,
   UserRole,
 } from 'src/common/enums';
+import { ApiExcludeEndpoint } from '@nestjs/swagger';
 
 @UseGuards(AuthGuard)
 @Controller('academic_tests')
@@ -32,6 +33,7 @@ export class TestsController {
 
   @Post()
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   create(@Body() createTestDto: CreateTestDto) {
     return this.testsService.create(createTestDto);
   }
@@ -44,6 +46,7 @@ export class TestsController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.testsService.remove(id);
   }

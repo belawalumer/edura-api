@@ -1,11 +1,5 @@
 import { ContentType, Status } from '../../common/enums';
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 
 @Entity('banners_announcements')
 export class BannersAnnouncement {
@@ -14,6 +8,9 @@ export class BannersAnnouncement {
 
   @Column()
   title: string;
+
+  @Column({ type: 'text' })
+  description: string;
 
   @Column({
     type: 'enum',
@@ -38,9 +35,6 @@ export class BannersAnnouncement {
   @Column({ nullable: true })
   ctaLink?: string;
 
-  @CreateDateColumn()
-  createdAt: Date;
-
-  @UpdateDateColumn()
-  updatedAt: Date;
+  @Column({ nullable: true })
+  image: string;
 }
