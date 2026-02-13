@@ -11,6 +11,9 @@ import { TestsModule } from './tests/tests.module';
 import { BannersAnnouncementsModule } from './banners_announcements/banners_announcements.module';
 import { FaqsModule } from './faqs/faqs.module';
 import { UserModule } from './user/user.module';
+import { JobsModule } from './jobs/jobs.module';
+import { PastPapersModule } from './past-papers/past-papers.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -42,6 +45,9 @@ import { UserModule } from './user/user.module';
     BannersAnnouncementsModule,
     FaqsModule,
     UserModule,
+    JobsModule,
+    PastPapersModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

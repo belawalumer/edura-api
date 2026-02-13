@@ -33,3 +33,17 @@ export enum EntryType {
   WITH_DIVISIONS = 'with-divisions',
   WITHOUT_DIVISIONS = 'without-divisions',
 }
+
+export enum EmploymentStatus {
+  FULL_TIME = 'Full-Time',
+  PART_TIME = 'Part-Time',
+  CONTRACT = 'Contract',
+  TEMPORARY = 'Temporary',
+  INTERNSHIP = 'Internship',
+}
+
+export enum Gender {
+  MALE = 'Male',
+  FEMALE = 'Female',
+  ANY = 'Any',
+}
