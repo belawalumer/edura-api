@@ -12,7 +12,7 @@ describe('BannersAnnouncementsController', () => {
     }).compile();
 
     controller = module.get<BannersAnnouncementsController>(
-      BannersAnnouncementsController,
+      BannersAnnouncementsController
     );
   });
 

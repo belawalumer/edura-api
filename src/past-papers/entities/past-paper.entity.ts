@@ -1,3 +1,4 @@
+import { ExamCategory } from '../../exam-category/entities/exam-category.entity';
 import { Status } from '../../common/enums';
 import { Grade } from '../../grades/entities/grade.entity';
 import { Subject } from '../../subjects/entities/subject.entity';
@@ -8,28 +9,35 @@ import {
   ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
+  JoinColumn,
 } from 'typeorm';
-import { ExamCategory } from './exam-category.entity';
 
 @Entity('past_papers')
 export class PastPaper {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => ExamCategory, { eager: true })
+  @ManyToOne(() => ExamCategory)
+  @JoinColumn({ name: 'category_id' })
   category: ExamCategory;
 
-  @ManyToOne(() => Grade, { eager: true })
+  @ManyToOne(() => ExamCategory)
+  @JoinColumn({ name: 'board_id' })
+  board: ExamCategory;
+
+  @ManyToOne(() => Grade)
+  @JoinColumn({ name: 'grade_id' })
   grade: Grade;
 
-  @ManyToOne(() => Subject, { eager: true })
+  @ManyToOne(() => Subject)
+  @JoinColumn({ name: 'subject_id' })
   subject: Subject;
 
   @Column()
   year: number;
 
   @Column({ type: 'text' })
-  file_url: string;
+  file: string;
 
   @Column({ type: 'enum', enum: Status, default: Status.ACTIVE })
   status: Status;

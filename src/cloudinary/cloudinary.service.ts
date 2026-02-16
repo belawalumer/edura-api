@@ -30,14 +30,15 @@ export class CloudinaryService {
 
   async uploadBuffer(
     buffer: Buffer,
-    filename: string
+    filename: string,
+    resourceType: 'image' | 'raw' | 'video' = 'image'
   ): Promise<CloudinaryUploadResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: 'uploads',
           public_id: `${uuidv4()}-${filename}`,
-          resource_type: 'image',
+          resource_type: resourceType,
         },
         (error: Error | undefined, result?: UploadApiResponse) => {
           if (error) {

@@ -39,32 +39,16 @@ export class CreateJobDto {
   industry_id?: number;
 
   @IsOptional()
-  @IsString()
-  industry?: string;
-
-  @IsOptional()
   @IsNumber()
   department_id?: number;
-
-  @IsOptional()
-  @IsString()
-  department?: string;
 
   @IsOptional()
   @IsNumber()
   location_id?: number;
 
   @IsOptional()
-  @IsString()
-  location?: string;
-
-  @IsOptional()
   @IsNumber()
   career_level_id?: number;
-
-  @IsOptional()
-  @IsString()
-  career_level?: string;
 
   @IsOptional()
   @IsString()

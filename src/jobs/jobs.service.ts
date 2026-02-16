@@ -8,12 +8,12 @@ import { Repository } from 'typeorm';
 import { Job } from './entities/job.entity';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
-import { Industry } from './entities/industry.entity';
-import { Location } from './entities/locations.entity';
-import { CareerLevel } from './entities/career_levels.entity';
-import { Department } from './entities/departments.entity';
 import { PaginationQueryDto } from 'src/common/dto';
 import { JobPreferredCandidate } from './entities/job_preferred_candidates.entity';
+import { Industry } from '../industries/entities/industry.entity';
+import { CareerLevel } from '../career-levels/entities/career-level.entity';
+import { Department } from '../departments/entities/department.entity';
+import { Location } from '../locations/entities/location.entity';
 
 @Injectable()
 export class JobsService {
@@ -95,80 +95,45 @@ export class JobsService {
   }
 
   async createJob(createJobDto: CreateJobDto) {
+    const {
+      industry_id,
+      department_id,
+      location_id,
+      career_level_id,
+      preferred_candidate,
+      ...simpleFields
+    } = createJobDto;
+
+    if (!industry_id) throw new NotFoundException('Industry is required');
+    if (!department_id) throw new NotFoundException('Department is required');
+    if (!location_id) throw new NotFoundException('Location is required');
+    if (!career_level_id)
+      throw new NotFoundException('Career level is required');
+
     const exists = await this.jobRepo.findOne({
-      where: { title: createJobDto.title },
+      where: {
+        title: createJobDto.title,
+        role: createJobDto.role,
+        industry: { id: industry_id },
+        department: { id: department_id },
+        location: { id: location_id },
+      },
     });
     if (exists) throw new ConflictException('Job already exists');
 
-    let industryId = createJobDto.industry_id;
-    if (!industryId && createJobDto.industry) {
-      let industry = await this.industryRepo.findOne({
-        where: { name: createJobDto.industry },
-      });
-      if (!industry) {
-        industry = await this.industryRepo.save({
-          name: createJobDto.industry,
-        });
-      }
-      industryId = industry.id;
-    }
-
-    let departmentId = createJobDto.department_id;
-    if (!departmentId && createJobDto.department) {
-      let dept = await this.departmentRepo.findOne({
-        where: { name: createJobDto.department },
-      });
-      if (!dept) {
-        dept = await this.departmentRepo.save({
-          name: createJobDto.department,
-        });
-      }
-      departmentId = dept.id;
-    }
-
-    let locationId = createJobDto.location_id;
-    if (!locationId && createJobDto.location) {
-      let loc = await this.locationRepo.findOne({
-        where: { name: createJobDto.location },
-      });
-      if (!loc) {
-        loc = await this.locationRepo.save({
-          name: createJobDto.location,
-        });
-      }
-      locationId = loc.id;
-    }
-
-    let careerLevelId = createJobDto.career_level_id;
-    if (!careerLevelId && createJobDto.career_level) {
-      let level = await this.careerLevelRepo.findOne({
-        where: { name: createJobDto.career_level },
-      });
-      if (!level) {
-        level = await this.careerLevelRepo.save({
-          name: createJobDto.career_level,
-        });
-      }
-      careerLevelId = level.id;
-    }
-
     const job = this.jobRepo.create({
-      ...createJobDto,
-      industry: industryId ? ({ id: industryId } as Industry) : undefined,
-      department: departmentId
-        ? ({ id: departmentId } as Department)
-        : undefined,
-      location: locationId ? ({ id: locationId } as Location) : undefined,
-      careerLevel: careerLevelId
-        ? ({ id: careerLevelId } as CareerLevel)
-        : undefined,
+      ...simpleFields,
+      industry: { id: industry_id },
+      department: { id: department_id },
+      location: { id: location_id },
+      careerLevel: { id: career_level_id },
     });
 
     await this.jobRepo.save(job);
 
-    if (createJobDto.preferred_candidate) {
+    if (preferred_candidate) {
       const preferred = this.preferredRepo.create({
-        ...createJobDto.preferred_candidate,
+        ...preferred_candidate,
         job,
       });
       await this.preferredRepo.save(preferred);
@@ -224,15 +189,9 @@ export class JobsService {
 
     await this.jobRepo.save(job);
 
-    if (preferred_candidate) {
-      if (!job.preferredCandidate) {
-        const newPreferred = this.preferredRepo.create(preferred_candidate);
-        newPreferred.job = job;
-        await this.preferredRepo.save(newPreferred);
-      } else {
-        Object.assign(job.preferredCandidate, preferred_candidate);
-        await this.preferredRepo.save(job.preferredCandidate);
-      }
+    if (preferred_candidate && job.preferredCandidate) {
+      Object.assign(job.preferredCandidate, preferred_candidate);
+      await this.preferredRepo.save(job.preferredCandidate);
     }
 
     return this.getJobById(job.id);

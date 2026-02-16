@@ -9,11 +9,11 @@ import {
   UpdateDateColumn,
   OneToOne,
 } from 'typeorm';
-import { Department } from './departments.entity';
-import { Industry } from './industry.entity';
-import { Location } from './locations.entity';
-import { CareerLevel } from './career_levels.entity';
 import { JobPreferredCandidate } from './job_preferred_candidates.entity';
+import { Industry } from '../../industries/entities/industry.entity';
+import { Department } from '../../departments/entities/department.entity';
+import { Location } from '../../locations/entities/location.entity';
+import { CareerLevel } from '../../career-levels/entities/career-level.entity';
 
 @Entity('jobs')
 export class Job {

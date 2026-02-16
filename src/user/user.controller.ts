@@ -45,7 +45,7 @@ export class UserController {
 
   @Patch('admin/:id/profile')
   @Roles(UserRole.ADMIN)
-  @UseInterceptors(CloudinaryFile('image'))
+  @UseInterceptors(CloudinaryFile('image', 'image'))
   @ApiConsumes('multipart/form-data')
   @ApiExcludeEndpoint()
   async updateAdminProfile(

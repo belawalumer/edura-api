@@ -34,7 +34,7 @@ export class BannersAnnouncementsController {
 
   @Post()
   @Roles(UserRole.ADMIN)
-  @UseInterceptors(CloudinaryFile('banner'))
+  @UseInterceptors(CloudinaryFile('banner', 'image'))
   @ApiConsumes('multipart/form-data')
   @ApiExcludeEndpoint()
   async create(
@@ -66,7 +66,7 @@ export class BannersAnnouncementsController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN)
-  @UseInterceptors(CloudinaryFile('banner'))
+  @UseInterceptors(CloudinaryFile('banner', 'image'))
   @ApiConsumes('multipart/form-data')
   @ApiExcludeEndpoint()
   @ApiBody({ type: UpdateBannersAnnouncementDto })

@@ -14,6 +14,11 @@ import { UserModule } from './user/user.module';
 import { JobsModule } from './jobs/jobs.module';
 import { PastPapersModule } from './past-papers/past-papers.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { IndustriesModule } from './industries/industries.module';
+import { DepartmentsModule } from './departments/departments.module';
+import { CareerLevelsModule } from './career-levels/career-levels.module';
+import { LocationsModule } from './locations/locations.module';
+import { ExamCategoryModule } from './exam-category/exam-category.module';
 
 @Module({
   imports: [
@@ -48,6 +53,11 @@ import { DashboardModule } from './dashboard/dashboard.module';
     JobsModule,
     PastPapersModule,
     DashboardModule,
+    IndustriesModule,
+    DepartmentsModule,
+    CareerLevelsModule,
+    LocationsModule,
+    ExamCategoryModule,
   ],
 })
 export class AppModule {}

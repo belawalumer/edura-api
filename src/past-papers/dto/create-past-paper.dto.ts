@@ -1,26 +1,42 @@
-import { IsNotEmpty, IsNumber, IsString, IsEnum } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  IsEnum,
+  IsOptional,
+} from 'class-validator';
 import { Status } from '../../common/enums';
+import { Type } from 'class-transformer';
 
 export class CreatePastPaperDto {
   @IsNotEmpty()
   @IsNumber()
+  @Type(() => Number)
   category_id: number;
 
   @IsNotEmpty()
   @IsNumber()
+  @Type(() => Number)
+  board_id: number;
+
+  @IsNotEmpty()
+  @IsNumber()
+  @Type(() => Number)
   grade_id: number;
 
   @IsNotEmpty()
   @IsNumber()
+  @Type(() => Number)
   subject_id: number;
 
   @IsNotEmpty()
   @IsNumber()
+  @Type(() => Number)
   year: number;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  file_url: string;
+  file?: string;
 
   @IsEnum(Status)
   status?: Status = Status.ACTIVE;
