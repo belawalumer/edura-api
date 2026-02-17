@@ -24,7 +24,7 @@ export class PastPapersService {
     const exists = await this.repo.findOne({
       where: {
         category: { id: dto.category_id },
-        board: { id: dto.board_id },
+        board: dto.board_id ? { id: dto.board_id } : undefined,
         grade: { id: dto.grade_id },
         subject: { id: dto.subject_id },
         year: dto.year,
@@ -37,7 +37,7 @@ export class PastPapersService {
 
     const paper = this.repo.create({
       category: { id: dto.category_id },
-      board: { id: dto.board_id },
+      board: dto.board_id ? { id: dto.board_id } : undefined,
       grade: { id: dto.grade_id },
       subject: { id: dto.subject_id },
       year: dto.year,
@@ -50,7 +50,7 @@ export class PastPapersService {
     const responseData = {
       id: savedPaper.id,
       category_id: savedPaper.category.id,
-      board_id: savedPaper.board.id,
+      board_id: savedPaper.board?.id ?? undefined,
       grade_id: savedPaper.grade.id,
       subject_id: savedPaper.subject.id,
       year: savedPaper.year,

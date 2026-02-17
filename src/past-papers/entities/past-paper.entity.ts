@@ -21,9 +21,9 @@ export class PastPaper {
   @JoinColumn({ name: 'category_id' })
   category: ExamCategory;
 
-  @ManyToOne(() => ExamCategory)
+  @ManyToOne(() => ExamCategory, { nullable: true })
   @JoinColumn({ name: 'board_id' })
-  board: ExamCategory;
+  board?: ExamCategory | null;
 
   @ManyToOne(() => Grade)
   @JoinColumn({ name: 'grade_id' })

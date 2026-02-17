@@ -14,10 +14,10 @@ export class CreatePastPaperDto {
   @Type(() => Number)
   category_id: number;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
-  board_id: number;
+  board_id?: number;
 
   @IsNotEmpty()
   @IsNumber()

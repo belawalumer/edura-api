@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { ExamCategory } from './entities/exam-category.entity';
@@ -33,6 +37,20 @@ export class ExamCategoryService {
       where: { id: parentId },
     });
     if (!parent) throw new NotFoundException('Parent category not found');
+
+    const existingBoard = await this.examCategoryRepo
+      .createQueryBuilder('board')
+      .where('LOWER(board.name) = LOWER(:name)', {
+        name: createExamCategoryDto.name,
+      })
+      .andWhere('board.parentId = :parentId', { parentId })
+      .getOne();
+
+    if (existingBoard) {
+      throw new ConflictException(
+        'Board with this name already exists under this category'
+      );
+    }
 
     const child = this.examCategoryRepo.create({
       ...createExamCategoryDto,
