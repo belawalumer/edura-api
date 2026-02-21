@@ -16,21 +16,20 @@ export class AuthService {
     private readonly userRepo: Repository<User>
   ) {}
 
-  async login(phone: string, password: string) {
-    if (phone) {
-      phone = phone.trim().replace(/\s+/g, '');
+  async login(email: string, password: string) {
+    if (email) {
+      email = email.trim().toLowerCase();
     }
 
-    if (!phone || !password) {
-      throw new BadRequestException('Phone and password are required');
+    if (!email || !password) {
+      throw new BadRequestException('Email and password are required');
     }
 
-    const passwordRegex = /^\d{6,8}$/;
-    if (!passwordRegex.test(password)) {
-      throw new BadRequestException('Password must be 6 to 8 digits');
+    if (password.length < 6) {
+      throw new BadRequestException('Password must be at least 6 characters');
     }
 
-    const user = await this.userRepo.findOne({ where: { phone } });
+    const user = await this.userRepo.findOne({ where: { email } });
     if (!user) throw new BadRequestException('Invalid credentials');
 
     const isPasswordValid = await bcrypt.compare(password, user.password);

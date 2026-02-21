@@ -26,7 +26,7 @@ import {
   Status,
   TestStatus,
 } from 'src/common/enums';
-import { RawTestResult, TestDetails } from './dto/get-test-dto';
+import { TestDetails, TestDetailsBasic } from './dto/get-available-test-dto';
 
 @Injectable()
 export class TestsService {
@@ -388,51 +388,81 @@ export class TestsService {
     return { message: 'Test deleted successfully' };
   }
 
-  //Test Attempt API'S
+  async getAvailableTests(
+    filters: {
+      type: CategoryType;
+      gradeId?: number;
+      entryType?: EntryType;
+    },
+    query: PaginationQueryDto
+  ) {
+    const { page = 1, limit = 10, search } = query;
 
-  async getSubjectsForGrade(filters: {
-    type: CategoryType;
-    gradeId?: number;
-    entryType?: EntryType;
-  }) {
     // SUBJECT TESTS
     if (filters.type === CategoryType.SUBJECT_TEST) {
-      if (!filters.gradeId) {
-        throw new BadRequestException('gradeId is required for subject tests');
+      const qb = this.testRepo
+        .createQueryBuilder('test')
+        .leftJoinAndSelect('test.subject', 'subject')
+        .leftJoinAndSelect('test.chapter', 'chapter')
+        .leftJoinAndSelect('test.grade', 'grade')
+        .leftJoin('test.category', 'category')
+        .where('LOWER(category.name) = :cat', {
+          cat: CategoryName.SUBJECT_TEST,
+        })
+        .andWhere('test.status = :status', { status: Status.ACTIVE })
+        .orderBy('test.id', 'ASC')
+        .skip((page - 1) * limit)
+        .take(limit);
+
+      if (filters.gradeId != null) {
+        qb.andWhere('grade.id = :gradeId', { gradeId: filters.gradeId });
       }
 
-      const grade: Grade | null = await this.gradeRepo.findOne({
-        where: { id: filters.gradeId },
-        relations: ['gradeSubjects', 'gradeSubjects.subject'],
-      });
+      if (search) {
+        qb.andWhere('test.title ILIKE :search', { search: `%${search}%` });
+      }
 
-      if (!grade) throw new NotFoundException('Grade not found');
-
-      const subjects = grade.gradeSubjects
-        .filter((gs) => gs.subject.status === Status.ACTIVE)
-        .map((gs) => ({
-          id: gs.subject.id,
-          name: gs.subject.name,
-          status: gs.subject.status,
-        }));
+      const [rawItems, total] = await qb.getManyAndCount();
+      const items = rawItems.map((test) => ({
+        id: test.id,
+        title: test.title,
+        total_questions: test.total_questions,
+        total_duration: test.total_duration,
+        subject: test.subject?.name ?? null,
+        grade: test.grade?.name ?? null,
+        chapter: test.chapter?.name ?? null,
+      }));
 
       return {
-        data: subjects,
+        data: {
+          items,
+          meta: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            hasMore: page * limit < total,
+          },
+        },
       };
     }
 
     // ENTRY TESTS
     if (filters.type === CategoryType.ENTRY_TEST) {
-      const query = this.testRepo
+      const qb = this.testRepo
         .createQueryBuilder('academic_tests')
+        .leftJoinAndSelect('academic_tests.divisions', 'divisions')
         .leftJoin('academic_tests.category', 'category')
         .leftJoin('academic_tests.parentTest', 'parentTest')
         .where('LOWER(category.name) = :cat', { cat: CategoryName.ENTRY_TEST })
         .andWhere('academic_tests.parentTest IS NULL')
-        .andWhere('academic_tests.status = :status', { status: Status.ACTIVE });
+        .andWhere('academic_tests.status = :status', { status: Status.ACTIVE })
+        .orderBy('academic_tests.id', 'ASC')
+        .skip((page - 1) * limit)
+        .take(limit);
 
       if (filters.entryType === EntryType.WITH_DIVISIONS) {
-        query.andWhere(`
+        qb.andWhere(`
         EXISTS (
           SELECT 1 FROM academic_tests child
           WHERE child.parent_test_id = academic_tests.id
@@ -441,7 +471,7 @@ export class TestsService {
       }
 
       if (filters.entryType === EntryType.WITHOUT_DIVISIONS) {
-        query.andWhere(`
+        qb.andWhere(`
         NOT EXISTS (
           SELECT 1 FROM academic_tests child
           WHERE child.parent_test_id = academic_tests.id
@@ -449,64 +479,67 @@ export class TestsService {
       `);
       }
 
-      const tests = await query.getMany();
+      if (search) {
+        qb.andWhere('academic_tests.title ILIKE :search', {
+          search: `%${search}%`,
+        });
+      }
+
+      const [rawItems, total] = await qb.getManyAndCount();
+      const items = rawItems.map((test) => ({
+        id: test.id,
+        title: test.title,
+        total_questions: test.total_questions,
+        total_duration: test.total_duration,
+        entry_type:
+          test.divisions && test.divisions.length > 0
+            ? EntryType.WITH_DIVISIONS
+            : EntryType.WITHOUT_DIVISIONS,
+      }));
+
       return {
-        data: tests,
+        data: {
+          items,
+          meta: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            hasMore: page * limit < total,
+          },
+        },
       };
     }
   }
 
-  async getAllTestsByGradeAndSubject(
-    gradeId: number,
-    subjectId: number,
-    filter?: TestStatus
-  ) {
-    if (!gradeId || !subjectId) {
-      throw new BadRequestException('Both gradeId and subjectId are required');
-    }
+  async getTestById(testId: number): Promise<{ data: TestDetailsBasic }> {
+    const test = await this.testRepo.findOne({
+      where: { id: testId },
+      relations: ['category', 'parentTest', 'divisions'],
+    });
 
-    const query = this.testRepo
-      .createQueryBuilder('test')
-      .leftJoin('test_attempts', 'attempt', 'attempt.test_id = test.id')
-      .where('test.grade_id = :gradeId', { gradeId })
-      .andWhere('test.subject_id = :subjectId', { subjectId })
-      .andWhere('test.status = :status', { status: Status.ACTIVE });
+    if (!test) throw new NotFoundException('Test not found');
 
-    if (filter) {
-      query.andWhere('attempt.status = :attemptStatus', {
-        attemptStatus: filter,
-      });
-    }
-
-    const tests = await query
-      .select([
-        'test.id AS id',
-        'test.title AS title',
-        'test.total_questions AS total_questions',
-        'test.total_duration AS total_duration',
-        `
-      CASE
-        WHEN attempt.status = 'in_progress' THEN 'in_progress'
-        WHEN attempt.status = 'completed' THEN 'completed'
-        ELSE 'active'
-      END AS status
-      `,
-      ])
-      .orderBy('test.id', 'ASC')
-      .getRawMany<RawTestResult>();
-
-    return {
-      data: tests.map((t) => ({
-        id: t.id,
-        title: t.title,
-        total_questions: Number(t.total_questions),
-        total_duration: Number(t.total_duration),
-        status: t.status,
-      })),
+    const testDetails: TestDetailsBasic = {
+      id: test.id,
+      title: test.title,
+      total_questions: test.total_questions,
+      total_duration: test.total_duration,
     };
+
+    if (test.divisions && test.divisions.length > 0) {
+      testDetails.divisions = test.divisions.map((division) => ({
+        id: division.id,
+        title: division.title,
+        total_questions: division.total_questions,
+        total_duration: division.total_duration,
+      }));
+    }
+
+    return { data: testDetails };
   }
 
-  async getTestById(
+  async getTestByUser(
     testId: number,
     userId?: number
   ): Promise<{ data: TestDetails }> {
@@ -578,7 +611,6 @@ export class TestsService {
   }
 
   async startTest(authUserId: number, test_id: number, page = 1, limit = 10) {
-    // Check if there is an IN_PROGRESS attempt
     const inProgressAttempt = await this.testAttemptRepo.findOne({
       where: {
         user_id: authUserId,
@@ -594,7 +626,8 @@ export class TestsService {
     });
 
     if (inProgressAttempt) {
-      // RESUME TEST
+      const remainingDuration = inProgressAttempt.remaining_duration ?? 0;
+
       const allQuestions = inProgressAttempt.attemptedQuestions
         .sort((a, b) => a.question_order - b.question_order)
         .map((aq) => ({
@@ -617,7 +650,7 @@ export class TestsService {
           test_attempt_id: inProgressAttempt.id,
           resume: true,
           attempt_count: inProgressAttempt.attempt_count,
-          duration: inProgressAttempt.remaining_duration,
+          duration: remainingDuration,
           items,
           meta: {
             total,
@@ -630,7 +663,6 @@ export class TestsService {
       };
     }
 
-    // Fetch test safely (FOR DURATION)
     const test = await this.testRepo.findOne({ where: { id: test_id } });
     if (!test) throw new NotFoundException('Test not found');
 

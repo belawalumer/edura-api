@@ -30,7 +30,6 @@ export class FaqsController {
   }
 
   @Get()
-  @Roles(UserRole.ADMIN)
   findAll() {
     return this.faqsService.findAll();
   }
