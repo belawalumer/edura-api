@@ -53,6 +53,9 @@ export class TestAttempt {
   @Column({ type: 'int', nullable: true })
   remaining_duration: number;
 
+  @Column({ type: 'int', default: 0 })
+  coins_earned: number;
+
   @OneToMany(() => UserAnswer, (ua) => ua.testAttempt, {
     cascade: ['insert'],
   })

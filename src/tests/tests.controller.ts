@@ -15,6 +15,7 @@ import { TestsService } from './tests.service';
 import { CreateTestDto } from './dto/create-test.dto';
 import { PaginationQueryDto } from 'src/common/dto';
 import { AuthGuard } from 'src/auth/guard/auth_guard';
+import { Public } from 'src/auth/decorators/public.decorator';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { StartTestDto } from './dto/start-test-dto';
 import { SubmitTestDto } from './dto/submit-test-dto';
@@ -50,7 +51,11 @@ export class TestsController {
   }
 
   @Get('available')
-  async getAvailableTests(@Query() query: AvailableTestsQueryDto) {
+  @Public()
+  async getAvailableTests(
+    @Query() query: AvailableTestsQueryDto,
+    @Req() req: RequestWithUser
+  ) {
     const { type, gradeId, entryType } = query;
 
     const parsedGradeId =
@@ -66,25 +71,22 @@ export class TestsController {
       throw new BadRequestException('gradeId must be a valid number');
     }
 
+    const userId = req.user?.id;
     return this.testsService.getAvailableTests(
       { type, gradeId: parsedGradeId, entryType },
-      query
+      query,
+      userId
     );
   }
 
-  @Get(':id/user')
-  @Roles(UserRole.USER)
-  async getTestByUser(
+  @Get(':id')
+  @Public()
+  async getTestById(
     @Param('id', ParseIntPipe) testId: number,
     @Req() req: RequestWithUser
   ) {
     const userId = req.user?.id;
-    return this.testsService.getTestByUser(testId, userId);
-  }
-
-  @Get(':id')
-  async getTestById(@Param('id', ParseIntPipe) testId: number) {
-    return this.testsService.getTestById(testId);
+    return this.testsService.getTestById(testId, userId);
   }
 
   @Post('start')

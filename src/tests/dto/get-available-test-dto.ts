@@ -28,6 +28,10 @@ export interface BasicTestDivision {
   title: string;
   total_questions: number;
   total_duration: number;
+  status?: 'active' | 'in_progress';
+  remaining_duration?: number | null;
+  attempted_questions?: number;
+  coins_earned?: number;
 }
 
 export interface TestDetailsBasic {
@@ -36,21 +40,7 @@ export interface TestDetailsBasic {
   total_questions: number;
   total_duration: number;
   divisions?: BasicTestDivision[];
-}
-
-interface RawTestDivision {
-  id: number;
-  title: string;
-  total_questions: number;
-  total_duration: number;
-  status: 'active' | 'in_progress' | 'completed';
-}
-
-export interface TestDetails {
-  id: number;
-  title: string;
-  total_questions: number;
-  total_duration: number;
-  status: 'active' | 'in_progress' | 'completed';
-  divisions?: RawTestDivision[];
+  status?: 'active' | 'in_progress';
+  remaining_duration?: number | null;
+  attempted_questions?: number;
 }

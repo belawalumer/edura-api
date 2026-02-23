@@ -44,6 +44,9 @@ export class User {
   @Column({ default: false })
   isSuspended: boolean;
 
+  @Column({ type: 'int', default: 0 })
+  total_coins: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

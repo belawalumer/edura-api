@@ -6,9 +6,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job } from './entities/job.entity';
+import { SavedJob } from './entities/saved_jobs.entity';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
-import { PaginationQueryDto } from 'src/common/dto';
+import { GetJobsQueryDto } from './dto/get-jobs-query.dto';
 import { JobPreferredCandidate } from './entities/job_preferred_candidates.entity';
 import { Industry } from '../industries/entities/industry.entity';
 import { CareerLevel } from '../career-levels/entities/career-level.entity';
@@ -19,6 +20,8 @@ import { Location } from '../locations/entities/location.entity';
 export class JobsService {
   constructor(
     @InjectRepository(Job) private readonly jobRepo: Repository<Job>,
+    @InjectRepository(SavedJob)
+    private readonly savedJobRepo: Repository<SavedJob>,
     @InjectRepository(JobPreferredCandidate)
     private readonly preferredRepo: Repository<JobPreferredCandidate>,
     @InjectRepository(Industry)
@@ -31,8 +34,47 @@ export class JobsService {
     private readonly departmentRepo: Repository<Department>
   ) {}
 
-  async getAllJobs(query: PaginationQueryDto) {
-    const { page = 1, limit = 10, search } = query;
+  async getAllJobs(query: GetJobsQueryDto, userId?: number) {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      location_id,
+      department_id,
+      industry_id,
+      industry_ids,
+      career_level_id,
+      career_level_ids,
+      saved_only,
+    } = query;
+
+    let savedIds = new Set<number>();
+    if (userId != null) {
+      const raw = await this.savedJobRepo
+        .createQueryBuilder('s')
+        .select('s.job_id', 'job_id')
+        .where('s.user_id = :userId', { userId })
+        .getRawMany<{ job_id: number }>();
+      savedIds = new Set(raw.map((r) => r.job_id).filter((id) => id != null));
+    }
+
+    if (saved_only && userId != null) {
+      if (savedIds.size === 0) {
+        return {
+          message: 'Jobs retrieved successfully',
+          data: {
+            items: [],
+            meta: {
+              total: 0,
+              page,
+              limit,
+              totalPages: 0,
+              hasMore: false,
+            },
+          },
+        };
+      }
+    }
 
     const qb = this.jobRepo
       .createQueryBuilder('job')
@@ -44,8 +86,60 @@ export class JobsService {
       .skip((page - 1) * limit)
       .take(limit);
 
+    if (saved_only && userId != null && savedIds.size > 0) {
+      qb.andWhere('job.id IN (:...savedIds)', {
+        savedIds: Array.from(savedIds),
+      });
+    }
+
     if (search) {
       qb.andWhere('job.title ILIKE :search', { search: `%${search}%` });
+    }
+
+    // Filters
+    if (location_id != null) {
+      qb.andWhere('job.location_id = :locationId', {
+        locationId: location_id,
+      });
+    }
+
+    if (department_id != null) {
+      qb.andWhere('job.department_id = :departmentId', {
+        departmentId: department_id,
+      });
+    }
+
+    if (industry_ids?.trim()) {
+      const ids = industry_ids
+        .split(',')
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => !Number.isNaN(n) && n >= 1);
+      if (ids.length > 0) {
+        qb.andWhere('job.industry_id IN (:...industryIds)', {
+          industryIds: ids,
+        });
+      }
+    } else if (industry_id != null) {
+      qb.andWhere('job.industry_id = :industryId', {
+        industryId: industry_id,
+      });
+    }
+
+    if (career_level_ids?.trim()) {
+      const ids = career_level_ids
+        .split(',')
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => !Number.isNaN(n) && n >= 1);
+
+      if (ids.length > 0) {
+        qb.andWhere('job.career_level_id IN (:...careerLevelIds)', {
+          careerLevelIds: ids,
+        });
+      }
+    } else if (career_level_id != null) {
+      qb.andWhere('job.career_level_id = :careerLevelId', {
+        careerLevelId: career_level_id,
+      });
     }
 
     const [jobs, total] = await qb.getManyAndCount();
@@ -62,6 +156,7 @@ export class JobsService {
       status: job.status,
       job_posted: job.job_posted,
       last_date_to_apply: job.last_date_to_apply,
+      saved: userId != null ? savedIds.has(job.id) : false,
     }));
 
     return {
@@ -216,5 +311,33 @@ export class JobsService {
       ]);
 
     return { industries, locations, careerLevels, departments };
+  }
+
+  async saveJob(userId: number, jobId: number) {
+    const job = await this.jobRepo.findOne({ where: { id: jobId } });
+    if (!job) throw new NotFoundException('Job not found');
+
+    const existing = await this.savedJobRepo.findOne({
+      where: { user_id: userId, job: { id: jobId } },
+    });
+    if (existing) throw new ConflictException('Job already saved');
+
+    const savedJob = this.savedJobRepo.create({
+      user_id: userId,
+      job: { id: jobId },
+    });
+    await this.savedJobRepo.save(savedJob);
+
+    return { message: 'Job saved successfully' };
+  }
+
+  async unsaveJob(userId: number, jobId: number) {
+    const saved = await this.savedJobRepo.findOne({
+      where: { user_id: userId, job: { id: jobId } },
+    });
+    if (!saved) throw new NotFoundException('Saved job not found');
+
+    await this.savedJobRepo.remove(saved);
+    return { message: 'Job removed from saved' };
   }
 }

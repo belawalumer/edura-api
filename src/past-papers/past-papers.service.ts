@@ -3,7 +3,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PastPaper } from './entities/past-paper.entity';
 import { CreatePastPaperDto } from './dto/create-past-paper.dto';
@@ -17,8 +17,32 @@ import { Subject } from '../subjects/entities/subject.entity';
 @Injectable()
 export class PastPapersService {
   constructor(
-    @InjectRepository(PastPaper) private readonly repo: Repository<PastPaper>
+    @InjectRepository(PastPaper) private readonly repo: Repository<PastPaper>,
+    @InjectRepository(ExamCategory)
+    private readonly categoryRepo: Repository<ExamCategory>
   ) {}
+
+  async getRootCategories() {
+    const categories = await this.categoryRepo.find({
+      where: { parent: IsNull() },
+      order: { name: 'ASC' },
+    });
+    return {
+      message: 'Root categories retrieved successfully',
+      data: categories.map((c) => ({ id: c.id, name: c.name })),
+    };
+  }
+
+  async getChildCategories(parentId: number) {
+    const children = await this.categoryRepo.find({
+      where: { parent: { id: parentId } },
+      order: { name: 'ASC' },
+    });
+    return {
+      message: 'Child categories retrieved successfully',
+      data: children.map((c) => ({ id: c.id, name: c.name })),
+    };
+  }
 
   async create(dto: CreatePastPaperDto) {
     const exists = await this.repo.findOne({
