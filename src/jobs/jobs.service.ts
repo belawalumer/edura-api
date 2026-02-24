@@ -109,33 +109,22 @@ export class JobsService {
       });
     }
 
-    if (industry_ids?.trim()) {
-      const ids = industry_ids
-        .split(',')
-        .map((s) => parseInt(s.trim(), 10))
-        .filter((n) => !Number.isNaN(n) && n >= 1);
-      if (ids.length > 0) {
-        qb.andWhere('job.industry_id IN (:...industryIds)', {
-          industryIds: ids,
-        });
-      }
+    const industryIds = this.parseIds(industry_ids);
+    if (industryIds.length > 0) {
+      qb.andWhere('job.industry_id IN (:...industryIds)', {
+        industryIds: industryIds,
+      });
     } else if (industry_id != null) {
       qb.andWhere('job.industry_id = :industryId', {
         industryId: industry_id,
       });
     }
 
-    if (career_level_ids?.trim()) {
-      const ids = career_level_ids
-        .split(',')
-        .map((s) => parseInt(s.trim(), 10))
-        .filter((n) => !Number.isNaN(n) && n >= 1);
-
-      if (ids.length > 0) {
-        qb.andWhere('job.career_level_id IN (:...careerLevelIds)', {
-          careerLevelIds: ids,
-        });
-      }
+    const careerLevelIds = this.parseIds(career_level_ids);
+    if (careerLevelIds.length > 0) {
+      qb.andWhere('job.career_level_id IN (:...careerLevelIds)', {
+        careerLevelIds: careerLevelIds,
+      });
     } else if (career_level_id != null) {
       qb.andWhere('job.career_level_id = :careerLevelId', {
         careerLevelId: career_level_id,
@@ -339,5 +328,15 @@ export class JobsService {
 
     await this.savedJobRepo.remove(saved);
     return { message: 'Job removed from saved' };
+  }
+
+  private parseIds(idsString?: string): number[] {
+    if (!idsString?.trim()) {
+      return [];
+    }
+    return idsString
+      .split(',')
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !Number.isNaN(n) && n >= 1);
   }
 }

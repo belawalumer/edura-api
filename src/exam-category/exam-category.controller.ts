@@ -13,6 +13,7 @@ import { AuthGuard } from '../auth/guard/auth_guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
+import { Public } from 'src/auth/decorators/public.decorator';
 
 @UseGuards(AuthGuard)
 @Controller('exam-categories')
@@ -20,13 +21,13 @@ export class ExamCategoryController {
   constructor(private readonly examCategoryService: ExamCategoryService) {}
 
   @Get()
-  @Roles(UserRole.ADMIN, UserRole.USER)
+  @Public()
   async getParentCategories() {
     return this.examCategoryService.findParentCategories();
   }
 
   @Get(':parentId/boards')
-  @Roles(UserRole.ADMIN, UserRole.USER)
+  @Public()
   findBoards(@Param('parentId', ParseIntPipe) parentId: number) {
     return this.examCategoryService.findBoards(parentId);
   }

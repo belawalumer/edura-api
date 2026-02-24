@@ -3,7 +3,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PastPaper } from './entities/past-paper.entity';
 import { CreatePastPaperDto } from './dto/create-past-paper.dto';
@@ -22,35 +22,13 @@ export class PastPapersService {
     private readonly categoryRepo: Repository<ExamCategory>
   ) {}
 
-  async getRootCategories() {
-    const categories = await this.categoryRepo.find({
-      where: { parent: IsNull() },
-      order: { name: 'ASC' },
-    });
-    return {
-      message: 'Root categories retrieved successfully',
-      data: categories.map((c) => ({ id: c.id, name: c.name })),
-    };
-  }
-
-  async getChildCategories(parentId: number) {
-    const children = await this.categoryRepo.find({
-      where: { parent: { id: parentId } },
-      order: { name: 'ASC' },
-    });
-    return {
-      message: 'Child categories retrieved successfully',
-      data: children.map((c) => ({ id: c.id, name: c.name })),
-    };
-  }
-
   async create(dto: CreatePastPaperDto) {
     const exists = await this.repo.findOne({
       where: {
         category: { id: dto.category_id },
         board: dto.board_id ? { id: dto.board_id } : undefined,
-        grade: { id: dto.grade_id },
-        subject: { id: dto.subject_id },
+        grade: dto.grade_id ? { id: dto.grade_id } : undefined,
+        subject: dto.subject_id ? { id: dto.subject_id } : undefined,
         year: dto.year,
       },
     });
@@ -62,8 +40,8 @@ export class PastPapersService {
     const paper = this.repo.create({
       category: { id: dto.category_id },
       board: dto.board_id ? { id: dto.board_id } : undefined,
-      grade: { id: dto.grade_id },
-      subject: { id: dto.subject_id },
+      grade: dto.grade_id ? { id: dto.grade_id } : undefined,
+      subject: dto.subject_id ? { id: dto.subject_id } : undefined,
       year: dto.year,
       file: dto.file,
       status: dto.status ?? Status.ACTIVE,
@@ -75,8 +53,8 @@ export class PastPapersService {
       id: savedPaper.id,
       category_id: savedPaper.category.id,
       board_id: savedPaper.board?.id ?? undefined,
-      grade_id: savedPaper.grade.id,
-      subject_id: savedPaper.subject.id,
+      grade_id: savedPaper.grade?.id ?? undefined,
+      subject_id: savedPaper.subject?.id ?? undefined,
       year: savedPaper.year,
       file: savedPaper.file,
       status: savedPaper.status,

@@ -16,6 +16,7 @@ import { AuthGuard } from 'src/auth/guard/auth_guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'src/common/enums';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
+import { Public } from 'src/auth/decorators/public.decorator';
 
 @UseGuards(AuthGuard)
 @Controller('faqs')
@@ -30,6 +31,7 @@ export class FaqsController {
   }
 
   @Get()
+  @Public()
   findAll() {
     return this.faqsService.findAll();
   }

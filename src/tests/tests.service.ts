@@ -791,6 +791,13 @@ export class TestsService {
           duration: remainingDuration,
           items,
           saved_answers,
+          meta: {
+            total: allQuestions.length,
+            page,
+            limit,
+            totalPages: Math.ceil(allQuestions.length / limit),
+            hasMore: page * limit < allQuestions.length,
+          },
         },
       };
     }
@@ -863,6 +870,13 @@ export class TestsService {
         resume: false,
         duration: attempt.remaining_duration,
         items,
+        meta: {
+          total: attemptedQuestions.length,
+          page,
+          limit,
+          totalPages: Math.ceil(attemptedQuestions.length / limit),
+          hasMore: page * limit < attemptedQuestions.length,
+        },
       },
     };
   }
@@ -921,8 +935,9 @@ export class TestsService {
     }
 
     // Save answers
+    const questionMap = new Map(questions.map((q) => [q.id, q]));
     for (const ans of answers) {
-      const question = questions.find((q) => q.id === ans.question_id);
+      const question = questionMap.get(ans.question_id);
 
       if (!question) continue;
 
@@ -951,38 +966,6 @@ export class TestsService {
 
       await this.userAnswerRepo.save(userAnswer);
     }
-
-    // Recalculate total_correct, total_wrong, marks and coins_earned from all answers
-    const allAnswers = await this.userAnswerRepo.find({
-      where: { testAttempt: { id: attempt.id } },
-      relations: ['question'],
-    });
-
-    const NEGATIVE_MARKS = Number(process.env.NEGATIVE_MARKS ?? 0.25);
-    let total_correct = 0;
-    let total_wrong = 0;
-    let marks = 0;
-    for (const ua of allAnswers) {
-      if (ua.selected_option_id === null) {
-        continue;
-      }
-      if (ua.isCorrect) {
-        total_correct++;
-        marks += 1;
-      } else {
-        total_wrong++;
-        marks -= NEGATIVE_MARKS;
-      }
-    }
-    if (marks < 0) marks = 0;
-    const coins_earned = total_correct * 10;
-
-    await this.testAttemptRepo.update(attempt.id, {
-      total_correct,
-      total_wrong,
-      marks,
-      coins_earned,
-    });
 
     return { message: 'Progress saved successfully' };
   }
@@ -1033,13 +1016,13 @@ export class TestsService {
       existingAnswers.map((ua) => ua.question.id)
     );
 
+    const questionMap = new Map(attempt.test.questions.map((q) => [q.id, q]));
+
     // Allow ONLY unanswered questions
     const newAnswers = answers
       .filter((ans) => !alreadyAnsweredQuestionIds.has(ans.question_id))
       .map((ans) => {
-        const question = attempt.test.questions.find(
-          (q) => q.id === ans.question_id
-        )!;
+        const question = questionMap.get(ans.question_id)!;
 
         const isCorrect =
           ans.selected_option_id !== null &&

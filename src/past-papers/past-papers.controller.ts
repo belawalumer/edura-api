@@ -11,7 +11,6 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { PastPapersService } from './past-papers.service';
 import { CreatePastPaperDto } from './dto/create-past-paper.dto';
@@ -23,7 +22,6 @@ import { UserRole } from '../common/enums';
 import { ApiConsumes, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { CloudinaryFile } from '../common/interceptors/cloudinary-upload-interceptor';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
-import { Public } from 'src/auth/decorators/public.decorator';
 
 @UseGuards(AuthGuard)
 @Controller('past-papers')
@@ -65,18 +63,6 @@ export class PastPapersController {
   @ApiExcludeEndpoint()
   async findAll(@Query() query: PaginationQueryDto) {
     return this.pastPapersService.findAll(query);
-  }
-
-  @Get('categories')
-  @Public()
-  async getRootCategories() {
-    return this.pastPapersService.getRootCategories();
-  }
-
-  @Get('categories/:parentId/children')
-  @Public()
-  async getChildCategories(@Param('parentId', ParseIntPipe) parentId: number) {
-    return this.pastPapersService.getChildCategories(parentId);
   }
 
   @Get(':id')

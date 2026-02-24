@@ -25,13 +25,13 @@ export class PastPaper {
   @JoinColumn({ name: 'board_id' })
   board?: ExamCategory | null;
 
-  @ManyToOne(() => Grade)
+  @ManyToOne(() => Grade, { nullable: true })
   @JoinColumn({ name: 'grade_id' })
-  grade: Grade;
+  grade?: Grade | null;
 
-  @ManyToOne(() => Subject)
+  @ManyToOne(() => Subject, { nullable: true })
   @JoinColumn({ name: 'subject_id' })
-  subject: Subject;
+  subject?: Subject | null;
 
   @Column()
   year: number;
