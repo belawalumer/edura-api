@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, EntityManager } from 'typeorm';
+import { Repository, DataSource, EntityManager, In } from 'typeorm';
 import { Test } from './entities/test.entity';
 import { Question } from './entities/question.entity';
 import { Option } from './entities/option.entity';
@@ -26,7 +26,8 @@ import {
   Status,
   TestStatus,
 } from 'src/common/enums';
-import { RawTestResult, TestDetails } from './dto/get-test-dto';
+import { TestDetailsBasic } from './dto/get-available-test-dto';
+import { User } from 'src/user/entities/user.entity';
 
 @Injectable()
 export class TestsService {
@@ -42,7 +43,9 @@ export class TestsService {
     @InjectRepository(Question)
     private readonly questionRepo: Repository<Question>,
     @InjectRepository(Grade)
-    private readonly gradeRepo: Repository<Grade>
+    private readonly gradeRepo: Repository<Grade>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>
   ) {}
 
   async create(createTestDto: CreateTestDto) {
@@ -388,236 +391,121 @@ export class TestsService {
     return { message: 'Test deleted successfully' };
   }
 
-  //Test Attempt API'S
+  async getAvailableTests(
+    filters: {
+      type: CategoryType;
+      gradeId?: number;
+      entryType?: EntryType;
+    },
+    query: PaginationQueryDto,
+    userId?: number
+  ) {
+    const { page = 1, limit = 10, search } = query;
 
-  async getSubjectsForGrade(filters: {
-    type: CategoryType;
-    gradeId?: number;
-    entryType?: EntryType;
-  }) {
+    const getAttemptMap = async (
+      testIds: number[]
+    ): Promise<
+      Map<
+        number,
+        {
+          id: number;
+          remaining_duration: number | null;
+          attemptedCount: number;
+          coins_earned: number;
+        }
+      >
+    > => {
+      if (!userId || testIds.length === 0) return new Map();
+      const attempts = await this.testAttemptRepo.find({
+        where: {
+          user_id: userId,
+          status: TestStatus.IN_PROGRESS,
+          test: { id: In(testIds) },
+        },
+        relations: ['answers', 'test'],
+      });
+      const map = new Map<
+        number,
+        {
+          id: number;
+          remaining_duration: number | null;
+          attemptedCount: number;
+          coins_earned: number;
+        }
+      >();
+      for (const a of attempts) {
+        const testId = a.test?.id;
+        if (testId != null) {
+          const attemptedCount =
+            a.answers?.filter((ua) => ua.selected_option_id != null).length ??
+            0;
+          map.set(testId, {
+            id: a.id,
+            remaining_duration: a.remaining_duration ?? null,
+            attemptedCount,
+            coins_earned: Number(a.coins_earned ?? 0),
+          });
+        }
+      }
+      return map;
+    };
+
     // SUBJECT TESTS
     if (filters.type === CategoryType.SUBJECT_TEST) {
-      if (!filters.gradeId) {
-        throw new BadRequestException('gradeId is required for subject tests');
+      const qb = this.testRepo
+        .createQueryBuilder('test')
+        .leftJoinAndSelect('test.subject', 'subject')
+        .leftJoinAndSelect('test.chapter', 'chapter')
+        .leftJoinAndSelect('test.grade', 'grade')
+        .leftJoin('test.category', 'category')
+        .where('LOWER(category.name) = :cat', {
+          cat: CategoryName.SUBJECT_TEST,
+        })
+        .andWhere('test.status = :status', { status: Status.ACTIVE })
+        .orderBy('test.id', 'ASC')
+        .skip((page - 1) * limit)
+        .take(limit);
+
+      if (filters.gradeId != null) {
+        qb.andWhere('grade.id = :gradeId', { gradeId: filters.gradeId });
       }
 
-      const grade: Grade | null = await this.gradeRepo.findOne({
-        where: { id: filters.gradeId },
-        relations: ['gradeSubjects', 'gradeSubjects.subject'],
-      });
-
-      if (!grade) throw new NotFoundException('Grade not found');
-
-      const subjects = grade.gradeSubjects
-        .filter((gs) => gs.subject.status === Status.ACTIVE)
-        .map((gs) => ({
-          id: gs.subject.id,
-          name: gs.subject.name,
-          status: gs.subject.status,
-        }));
-
-      return {
-        data: subjects,
-      };
-    }
-
-    // ENTRY TESTS
-    if (filters.type === CategoryType.ENTRY_TEST) {
-      const query = this.testRepo
-        .createQueryBuilder('academic_tests')
-        .leftJoin('academic_tests.category', 'category')
-        .leftJoin('academic_tests.parentTest', 'parentTest')
-        .where('LOWER(category.name) = :cat', { cat: CategoryName.ENTRY_TEST })
-        .andWhere('academic_tests.parentTest IS NULL')
-        .andWhere('academic_tests.status = :status', { status: Status.ACTIVE });
-
-      if (filters.entryType === EntryType.WITH_DIVISIONS) {
-        query.andWhere(`
-        EXISTS (
-          SELECT 1 FROM academic_tests child
-          WHERE child.parent_test_id = academic_tests.id
-        )
-      `);
+      if (search) {
+        qb.andWhere('test.title ILIKE :search', { search: `%${search}%` });
       }
 
-      if (filters.entryType === EntryType.WITHOUT_DIVISIONS) {
-        query.andWhere(`
-        NOT EXISTS (
-          SELECT 1 FROM academic_tests child
-          WHERE child.parent_test_id = academic_tests.id
-        )
-      `);
-      }
+      const [rawItems, total] = await qb.getManyAndCount();
+      const testIds = rawItems.map((t) => t.id);
+      const attemptMap = await getAttemptMap(testIds);
 
-      const tests = await query.getMany();
-      return {
-        data: tests,
-      };
-    }
-  }
-
-  async getAllTestsByGradeAndSubject(
-    gradeId: number,
-    subjectId: number,
-    filter?: TestStatus
-  ) {
-    if (!gradeId || !subjectId) {
-      throw new BadRequestException('Both gradeId and subjectId are required');
-    }
-
-    const query = this.testRepo
-      .createQueryBuilder('test')
-      .leftJoin('test_attempts', 'attempt', 'attempt.test_id = test.id')
-      .where('test.grade_id = :gradeId', { gradeId })
-      .andWhere('test.subject_id = :subjectId', { subjectId })
-      .andWhere('test.status = :status', { status: Status.ACTIVE });
-
-    if (filter) {
-      query.andWhere('attempt.status = :attemptStatus', {
-        attemptStatus: filter,
-      });
-    }
-
-    const tests = await query
-      .select([
-        'test.id AS id',
-        'test.title AS title',
-        'test.total_questions AS total_questions',
-        'test.total_duration AS total_duration',
-        `
-      CASE
-        WHEN attempt.status = 'in_progress' THEN 'in_progress'
-        WHEN attempt.status = 'completed' THEN 'completed'
-        ELSE 'active'
-      END AS status
-      `,
-      ])
-      .orderBy('test.id', 'ASC')
-      .getRawMany<RawTestResult>();
-
-    return {
-      data: tests.map((t) => ({
-        id: t.id,
-        title: t.title,
-        total_questions: Number(t.total_questions),
-        total_duration: Number(t.total_duration),
-        status: t.status,
-      })),
-    };
-  }
-
-  async getTestById(
-    testId: number,
-    userId?: number
-  ): Promise<{ data: TestDetails }> {
-    const test = await this.testRepo.findOne({
-      where: { id: testId },
-      relations: ['category', 'parentTest', 'divisions'],
-    });
-
-    if (!test) throw new NotFoundException('Test not found');
-
-    let status: 'active' | 'in_progress' | 'completed' = 'active';
-
-    if (userId) {
-      const attempt = await this.testAttemptRepo.findOne({
-        where: { test: { id: testId }, user_id: userId },
-      });
-
-      if (attempt) {
-        if (attempt.status === TestStatus.IN_PROGRESS)
-          status = TestStatus.IN_PROGRESS;
-        else if (attempt.status === TestStatus.COMPLETED)
-          status = TestStatus.COMPLETED;
-      }
-    }
-
-    const testDetails: TestDetails = {
-      id: test.id,
-      title: test.title,
-      total_questions: test.total_questions,
-      total_duration: test.total_duration,
-      status,
-    };
-
-    // If Entry Test with divisions
-    const isEntryTest =
-      test.category.name.toLowerCase() ===
-      CategoryName.ENTRY_TEST.toLowerCase();
-
-    if (isEntryTest && test.divisions && test.divisions.length > 0) {
-      const divisionPromises = test.divisions.map(async (division) => {
-        let divStatus: 'active' | 'in_progress' | 'completed' = 'active';
-
-        if (userId) {
-          const attempt = await this.testAttemptRepo.findOne({
-            where: { test: { id: division.id }, user_id: userId },
-          });
-
-          if (attempt) {
-            if (attempt.status === TestStatus.IN_PROGRESS)
-              divStatus = TestStatus.IN_PROGRESS;
-            else if (attempt.status === TestStatus.COMPLETED)
-              divStatus = TestStatus.COMPLETED;
-          }
-        }
-
-        return {
-          id: division.id,
-          title: division.title,
-          total_questions: division.total_questions,
-          total_duration: division.total_duration,
-          status: divStatus,
+      const items = rawItems.map((test) => {
+        const attempt = attemptMap.get(test.id);
+        const base = {
+          id: test.id,
+          title: test.title,
+          total_questions: test.total_questions,
+          total_duration: test.total_duration,
+          subject: test.subject?.name ?? null,
+          grade: test.grade?.name ?? null,
         };
+        if (userId != null) {
+          const status = attempt ? 'in_progress' : 'active';
+          if (attempt) {
+            return {
+              ...base,
+              status,
+              remaining_duration: attempt.remaining_duration,
+              attempted_questions: attempt.attemptedCount,
+              coins_earned: Number(attempt.coins_earned ?? 0),
+            };
+          }
+          return { ...base, status, coins_earned: 0 };
+        }
+        return base;
       });
 
-      testDetails.divisions = await Promise.all(divisionPromises);
-    }
-
-    return { data: testDetails };
-  }
-
-  async startTest(authUserId: number, test_id: number, page = 1, limit = 10) {
-    // Check if there is an IN_PROGRESS attempt
-    const inProgressAttempt = await this.testAttemptRepo.findOne({
-      where: {
-        user_id: authUserId,
-        test: { id: test_id },
-        status: TestStatus.IN_PROGRESS,
-      },
-      relations: [
-        'test',
-        'attemptedQuestions',
-        'attemptedQuestions.question',
-        'attemptedQuestions.question.options',
-      ],
-    });
-
-    if (inProgressAttempt) {
-      // RESUME TEST
-      const allQuestions = inProgressAttempt.attemptedQuestions
-        .sort((a, b) => a.question_order - b.question_order)
-        .map((aq) => ({
-          id: aq.question.id,
-          title: aq.question.title,
-          options: aq.question.options.map((opt) => ({
-            id: opt.id,
-            value: opt.value,
-          })),
-        }));
-
-      const total = allQuestions.length;
-      const start = (page - 1) * limit;
-      const end = page * limit;
-      const items = allQuestions.slice(start, end);
-
       return {
-        message: 'Test resumed successfully',
         data: {
-          test_attempt_id: inProgressAttempt.id,
-          resume: true,
-          attempt_count: inProgressAttempt.attempt_count,
-          duration: inProgressAttempt.remaining_duration,
           items,
           meta: {
             total,
@@ -630,7 +518,290 @@ export class TestsService {
       };
     }
 
-    // Fetch test safely (FOR DURATION)
+    // ENTRY TESTS
+    if (filters.type === CategoryType.ENTRY_TEST) {
+      const qb = this.testRepo
+        .createQueryBuilder('academic_tests')
+        .leftJoinAndSelect('academic_tests.divisions', 'divisions')
+        .leftJoin('academic_tests.category', 'category')
+        .leftJoin('academic_tests.parentTest', 'parentTest')
+        .where('LOWER(category.name) = :cat', { cat: CategoryName.ENTRY_TEST })
+        .andWhere('academic_tests.parentTest IS NULL')
+        .andWhere('academic_tests.status = :status', { status: Status.ACTIVE })
+        .orderBy('academic_tests.id', 'ASC')
+        .skip((page - 1) * limit)
+        .take(limit);
+
+      if (filters.entryType === EntryType.WITH_DIVISIONS) {
+        qb.andWhere(`
+        EXISTS (
+          SELECT 1 FROM academic_tests child
+          WHERE child.parent_test_id = academic_tests.id
+        )
+      `);
+      }
+
+      if (filters.entryType === EntryType.WITHOUT_DIVISIONS) {
+        qb.andWhere(`
+        NOT EXISTS (
+          SELECT 1 FROM academic_tests child
+          WHERE child.parent_test_id = academic_tests.id
+        )
+      `);
+      }
+
+      if (search) {
+        qb.andWhere('academic_tests.title ILIKE :search', {
+          search: `%${search}%`,
+        });
+      }
+
+      const [rawItems, total] = await qb.getManyAndCount();
+      const testIds = rawItems.flatMap((t) =>
+        t.divisions && t.divisions.length > 0
+          ? t.divisions.map((d) => d.id)
+          : [t.id]
+      );
+      const attemptMap = await getAttemptMap(testIds);
+
+      const items = rawItems.map((test) => {
+        const hasDivisions = test.divisions && test.divisions.length > 0;
+        const base = {
+          id: test.id,
+          title: test.title,
+          total_questions: test.total_questions,
+          total_duration: test.total_duration,
+          entry_type: hasDivisions
+            ? EntryType.WITH_DIVISIONS
+            : EntryType.WITHOUT_DIVISIONS,
+        };
+
+        if (userId != null) {
+          if (hasDivisions && test.divisions) {
+            const divisions = test.divisions;
+            let attempted_questions = 0;
+            let coins_earned = 0;
+            let remaining_duration_sum_sec = 0;
+            for (const div of divisions) {
+              const divAttempt = attemptMap.get(div.id);
+              if (divAttempt) {
+                attempted_questions += divAttempt.attemptedCount;
+                coins_earned += Number(divAttempt.coins_earned ?? 0);
+                const divRemainingSec =
+                  divAttempt.remaining_duration ??
+                  (div.total_duration != null ? div.total_duration * 60 : 0);
+                remaining_duration_sum_sec += divRemainingSec;
+              } else {
+                remaining_duration_sum_sec += (div.total_duration ?? 0) * 60;
+              }
+            }
+            const remaining_duration =
+              remaining_duration_sum_sec > 0
+                ? remaining_duration_sum_sec
+                : null;
+            const total_questions = divisions.reduce(
+              (sum, d) => sum + (d.total_questions ?? 0),
+              0
+            );
+            const status = divisions.some((d) => attemptMap.has(d.id))
+              ? 'in_progress'
+              : 'active';
+            return {
+              ...base,
+              total_questions,
+              status,
+              remaining_duration: remaining_duration ?? undefined,
+              attempted_questions,
+              coins_earned,
+            };
+          }
+
+          const attempt = attemptMap.get(test.id);
+          const status = attempt ? 'in_progress' : 'active';
+          if (attempt) {
+            return {
+              ...base,
+              status,
+              remaining_duration: attempt.remaining_duration,
+              attempted_questions: attempt.attemptedCount,
+              coins_earned: Number(attempt.coins_earned ?? 0),
+            };
+          }
+          return { ...base, status, coins_earned: 0 };
+        }
+        return base;
+      });
+
+      return {
+        data: {
+          items,
+          meta: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            hasMore: page * limit < total,
+          },
+        },
+      };
+    }
+  }
+
+  async getTestById(
+    testId: number,
+    userId?: number
+  ): Promise<{ data: TestDetailsBasic }> {
+    const test = await this.testRepo.findOne({
+      where: { id: testId },
+      relations: ['category', 'parentTest', 'divisions'],
+    });
+
+    if (!test) throw new NotFoundException('Test not found');
+
+    const testIds =
+      test.divisions && test.divisions.length > 0
+        ? [test.id, ...test.divisions.map((d) => d.id)]
+        : [test.id];
+
+    const attemptMap = new Map<
+      number,
+      {
+        id: number;
+        remaining_duration: number | null;
+        attemptedCount: number;
+        coins_earned: number;
+      }
+    >();
+
+    if (userId && testIds.length > 0) {
+      const attempts = await this.testAttemptRepo.find({
+        where: {
+          user_id: userId,
+          status: TestStatus.IN_PROGRESS,
+          test: { id: In(testIds) },
+        },
+        relations: ['answers', 'test'],
+      });
+      for (const a of attempts) {
+        const tid = a.test?.id;
+        if (tid != null) {
+          const attemptedCount =
+            a.answers?.filter((ua) => ua.selected_option_id != null).length ??
+            0;
+          attemptMap.set(tid, {
+            id: a.id,
+            remaining_duration: a.remaining_duration ?? null,
+            attemptedCount,
+            coins_earned: Number(a.coins_earned ?? 0),
+          });
+        }
+      }
+    }
+
+    const testDetails: TestDetailsBasic = {
+      id: test.id,
+      title: test.title,
+      total_questions: test.total_questions,
+      total_duration: test.total_duration,
+    };
+
+    if (userId != null) {
+      const attempt = attemptMap.get(test.id);
+      testDetails.status = attempt ? 'in_progress' : 'active';
+      if (attempt) {
+        testDetails.remaining_duration = attempt.remaining_duration;
+        testDetails.attempted_questions = attempt.attemptedCount;
+      }
+    }
+
+    if (test.divisions && test.divisions.length > 0) {
+      testDetails.divisions = test.divisions.map((division) => {
+        const divAttempt = attemptMap.get(division.id);
+        const base = {
+          id: division.id,
+          title: division.title,
+          total_questions: division.total_questions,
+          total_duration: division.total_duration,
+        };
+        if (userId != null) {
+          const status = divAttempt ? 'in_progress' : 'active';
+          if (divAttempt) {
+            return {
+              ...base,
+              status,
+              remaining_duration: divAttempt.remaining_duration,
+              attempted_questions: divAttempt.attemptedCount,
+              coins_earned: Number(divAttempt.coins_earned ?? 0),
+            };
+          }
+          return { ...base, status };
+        }
+        return base;
+      });
+    }
+
+    return { data: testDetails };
+  }
+
+  async startTest(authUserId: number, test_id: number, page = 1, limit = 10) {
+    const inProgressAttempt = await this.testAttemptRepo.findOne({
+      where: {
+        user_id: authUserId,
+        test: { id: test_id },
+        status: TestStatus.IN_PROGRESS,
+      },
+      relations: [
+        'test',
+        'attemptedQuestions',
+        'attemptedQuestions.question',
+        'attemptedQuestions.question.options',
+        'answers',
+        'answers.question',
+      ],
+    });
+
+    if (inProgressAttempt) {
+      const remainingDuration = inProgressAttempt.remaining_duration ?? 0;
+
+      const allQuestions = inProgressAttempt.attemptedQuestions
+        .sort((a, b) => a.question_order - b.question_order)
+        .map((aq) => ({
+          id: aq.question.id,
+          title: aq.question.title,
+          options: aq.question.options.map((opt) => ({
+            id: opt.id,
+            value: opt.value,
+          })),
+        }));
+
+      const start = (page - 1) * limit;
+      const end = page * limit;
+      const items = allQuestions.slice(start, end);
+
+      const saved_answers = (inProgressAttempt.answers ?? []).map((ua) => ({
+        question_id: ua.question.id,
+        selected_option_id: ua.selected_option_id,
+      }));
+
+      return {
+        message: 'Test resumed successfully',
+        data: {
+          test_attempt_id: inProgressAttempt.id,
+          resume: true,
+          duration: remainingDuration,
+          items,
+          saved_answers,
+          meta: {
+            total: allQuestions.length,
+            page,
+            limit,
+            totalPages: Math.ceil(allQuestions.length / limit),
+            hasMore: page * limit < allQuestions.length,
+          },
+        },
+      };
+    }
+
     const test = await this.testRepo.findOne({ where: { id: test_id } });
     if (!test) throw new NotFoundException('Test not found');
 
@@ -680,8 +851,6 @@ export class TestsService {
     );
     await this.attemptedQuestionRepo.save(attemptedQuestions);
 
-    // Paginate questions
-    const total = attemptedQuestions.length;
     const start = (page - 1) * limit;
     const end = page * limit;
 
@@ -694,21 +863,19 @@ export class TestsService {
       })),
     }));
 
-    // Return paginated response
     return {
       message: 'Test started successfully',
       data: {
         test_attempt_id: attempt.id,
         resume: false,
-        attempt_count,
         duration: attempt.remaining_duration,
         items,
         meta: {
-          total,
+          total: attemptedQuestions.length,
           page,
           limit,
-          totalPages: Math.ceil(total / limit),
-          hasMore: page * limit < total,
+          totalPages: Math.ceil(attemptedQuestions.length / limit),
+          hasMore: page * limit < attemptedQuestions.length,
         },
       },
     };
@@ -745,7 +912,11 @@ export class TestsService {
       throw new NotFoundException('Active test attempt not found');
     }
 
-    const validQuestionIds = attempt.test.questions.map((q) => q.id);
+    const questions = attempt.test?.questions ?? [];
+    if (questions.length === 0) {
+      throw new BadRequestException('Test has no questions');
+    }
+    const validQuestionIds = questions.map((q) => q.id);
 
     // Validate that all submitted questions belong to this test
     const invalidQuestions = answers.filter(
@@ -764,10 +935,9 @@ export class TestsService {
     }
 
     // Save answers
+    const questionMap = new Map(questions.map((q) => [q.id, q]));
     for (const ans of answers) {
-      const question = attempt.test.questions.find(
-        (q) => q.id === ans.question_id
-      );
+      const question = questionMap.get(ans.question_id);
 
       if (!question) continue;
 
@@ -797,10 +967,7 @@ export class TestsService {
       await this.userAnswerRepo.save(userAnswer);
     }
 
-    return {
-      message: 'Progress saved successfully',
-      remaining_duration: attempt.remaining_duration,
-    };
+    return { message: 'Progress saved successfully' };
   }
 
   async submitTest(
@@ -849,13 +1016,13 @@ export class TestsService {
       existingAnswers.map((ua) => ua.question.id)
     );
 
+    const questionMap = new Map(attempt.test.questions.map((q) => [q.id, q]));
+
     // Allow ONLY unanswered questions
     const newAnswers = answers
       .filter((ans) => !alreadyAnsweredQuestionIds.has(ans.question_id))
       .map((ans) => {
-        const question = attempt.test.questions.find(
-          (q) => q.id === ans.question_id
-        )!;
+        const question = questionMap.get(ans.question_id)!;
 
         const isCorrect =
           ans.selected_option_id !== null &&
@@ -910,13 +1077,24 @@ export class TestsService {
 
     if (marks < 0) marks = 0;
 
+    const coins_earned = total_correct * 10;
+
     attempt.status = TestStatus.COMPLETED;
     attempt.end_time = new Date();
     attempt.marks = marks;
     attempt.total_correct = total_correct;
     attempt.total_wrong = total_wrong;
+    attempt.coins_earned = coins_earned;
 
     await this.testAttemptRepo.save(attempt);
+
+    const user = await this.userRepo.findOne({
+      where: { id: authUserId },
+    });
+    if (user) {
+      user.total_coins = Number(user.total_coins ?? 0) + coins_earned;
+      await this.userRepo.save(user);
+    }
 
     return {
       message: 'Test submitted successfully',
@@ -930,6 +1108,7 @@ export class TestsService {
         remaining_duration: attempt.remaining_duration,
         total_questions: attempt.test.questions.length,
         unanswered: unansweredQuestions.length,
+        coins_earned,
       },
     };
   }

@@ -19,15 +19,15 @@ export class CreatePastPaperDto {
   @Type(() => Number)
   board_id?: number;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
-  grade_id: number;
+  grade_id?: number;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
-  subject_id: number;
+  subject_id?: number;
 
   @IsNotEmpty()
   @IsNumber()

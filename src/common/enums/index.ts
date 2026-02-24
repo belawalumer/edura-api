@@ -26,7 +26,6 @@ export enum CategoryName {
 export enum CategoryType {
   ENTRY_TEST = 'entry',
   SUBJECT_TEST = 'subject',
-  ALL = 'all',
 }
 
 export enum EntryType {

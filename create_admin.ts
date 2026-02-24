@@ -1,3 +1,7 @@
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+
 import { AppDataSource } from './src/data-source';
 import { UserRole } from './src/common/enums';
 import { User } from 'src/user/entities/user.entity';
@@ -10,9 +14,9 @@ async function createAdmin() {
 
     const userRepo = AppDataSource.getRepository(User);
 
-    const adminPhone = process.env.ADMIN_PHONE;
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPhone = process.env.ADMIN_PHONE?.trim() ?? '';
+    const adminPassword = process.env.ADMIN_PASSWORD ?? '';
+    const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase() ?? '';
 
     if (!adminPhone || !adminPassword || !adminEmail) {
       console.error(
@@ -21,13 +25,13 @@ async function createAdmin() {
       process.exit(1);
     }
 
-    // Check if admin already exists by phone
+    // Check if admin already exists by phone or email
     const existingAdmin = await userRepo.findOne({
-      where: { phone: adminPhone },
+      where: [{ phone: adminPhone }, { email: adminEmail }],
     });
 
     if (existingAdmin) {
-      console.log(' Admin already exists with this phone');
+      console.log('Admin already exists with this phone or email');
       process.exit(0);
     }
 

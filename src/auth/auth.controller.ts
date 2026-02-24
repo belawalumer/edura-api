@@ -8,7 +8,7 @@ export class AuthController {
 
   @Post('login')
   async login(@Body() body: LoginDto) {
-    return this.authService.login(body.phone, body.password);
+    return this.authService.login(body.email, body.password);
   }
 
   @Post('refresh-token')

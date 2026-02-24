@@ -14,6 +14,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserRole } from 'src/common/enums';
 import { generateRefreshToken } from '../helpers/token.helper';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
 export interface AuthUser {
   id?: number;
@@ -51,9 +52,14 @@ export class AuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<RequestWithUser>();
+    const isPublic = this.reflector.get<boolean>(
+      IS_PUBLIC_KEY,
+      context.getHandler()
+    );
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
+      if (isPublic) return true;
       throw new UnauthorizedException('Authorization header missing');
     }
 
@@ -68,7 +74,10 @@ export class AuthGuard implements CanActivate {
         );
       const decoded = jwt.verify(token, secret) as JwtPayload;
       const dbUser = await this.userRepo.findOneBy({ id: decoded.id });
-      if (!dbUser) throw new UnauthorizedException('User not found');
+      if (!dbUser) {
+        if (isPublic) return true;
+        throw new UnauthorizedException('User not found');
+      }
 
       user = {
         id: dbUser.id,
@@ -78,10 +87,17 @@ export class AuthGuard implements CanActivate {
       };
     } catch (err: any) {
       const e = err as { name?: string };
+      if (
+        isPublic &&
+        (e.name === 'TokenExpiredError' || e.name === 'JsonWebTokenError')
+      ) {
+        return true;
+      }
       if (e.name === 'TokenExpiredError' || e.name === 'JsonWebTokenError') {
         const { data, error } = await this.supabase.auth.getUser(token);
 
         if (error || !data.user?.email) {
+          if (isPublic) return true;
           throw new UnauthorizedException('Invalid token');
         }
 
@@ -111,6 +127,7 @@ export class AuthGuard implements CanActivate {
           image: dbUser.image ?? undefined,
         };
       } else {
+        if (isPublic) return true;
         throw err;
       }
     }

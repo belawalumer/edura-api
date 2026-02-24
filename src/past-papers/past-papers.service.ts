@@ -17,7 +17,9 @@ import { Subject } from '../subjects/entities/subject.entity';
 @Injectable()
 export class PastPapersService {
   constructor(
-    @InjectRepository(PastPaper) private readonly repo: Repository<PastPaper>
+    @InjectRepository(PastPaper) private readonly repo: Repository<PastPaper>,
+    @InjectRepository(ExamCategory)
+    private readonly categoryRepo: Repository<ExamCategory>
   ) {}
 
   async create(dto: CreatePastPaperDto) {
@@ -25,8 +27,8 @@ export class PastPapersService {
       where: {
         category: { id: dto.category_id },
         board: dto.board_id ? { id: dto.board_id } : undefined,
-        grade: { id: dto.grade_id },
-        subject: { id: dto.subject_id },
+        grade: dto.grade_id ? { id: dto.grade_id } : undefined,
+        subject: dto.subject_id ? { id: dto.subject_id } : undefined,
         year: dto.year,
       },
     });
@@ -38,8 +40,8 @@ export class PastPapersService {
     const paper = this.repo.create({
       category: { id: dto.category_id },
       board: dto.board_id ? { id: dto.board_id } : undefined,
-      grade: { id: dto.grade_id },
-      subject: { id: dto.subject_id },
+      grade: dto.grade_id ? { id: dto.grade_id } : undefined,
+      subject: dto.subject_id ? { id: dto.subject_id } : undefined,
       year: dto.year,
       file: dto.file,
       status: dto.status ?? Status.ACTIVE,
@@ -51,8 +53,8 @@ export class PastPapersService {
       id: savedPaper.id,
       category_id: savedPaper.category.id,
       board_id: savedPaper.board?.id ?? undefined,
-      grade_id: savedPaper.grade.id,
-      subject_id: savedPaper.subject.id,
+      grade_id: savedPaper.grade?.id ?? undefined,
+      subject_id: savedPaper.subject?.id ?? undefined,
       year: savedPaper.year,
       file: savedPaper.file,
       status: savedPaper.status,
