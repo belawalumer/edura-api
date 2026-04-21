@@ -12,6 +12,24 @@ export class UpdateAdminDto {
   @IsOptional()
   @IsString()
   image?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+}
+
+export class UpdateUserProfileDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
 }
 
 export class ChangePasswordDto {

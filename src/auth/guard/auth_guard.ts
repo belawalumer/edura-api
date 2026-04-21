@@ -84,6 +84,8 @@ export class AuthGuard implements CanActivate {
         email: dbUser.email,
         phone: dbUser.phone,
         role: dbUser.role,
+        name: dbUser.name,
+        image: dbUser.image ?? undefined,
       };
     } catch (err: any) {
       const e = err as { name?: string };

@@ -10,6 +10,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Req,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UserRole } from 'src/common/enums';
@@ -17,6 +18,7 @@ import {
   ChangePasswordDto,
   SuspendUserDto,
   UpdateAdminDto,
+  UpdateUserProfileDto,
 } from './dto/user.dto';
 import { AuthGuard } from 'src/auth/guard/auth_guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
@@ -24,10 +26,62 @@ import { CloudinaryFile } from 'src/common/interceptors/cloudinary-upload-interc
 import { ApiConsumes, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { PaginationQueryDto } from 'src/common/dto';
+import type { RequestWithUser } from 'src/auth/guard/auth_guard';
+import { Public } from 'src/auth/decorators/public.decorator';
 
 @UseGuards(AuthGuard)
 @Controller('user')
 export class UserController {
+  @Get('me')
+  getMyProfile(@Req() req: RequestWithUser) {
+    const userId = req?.user?.id;
+    return this.userService.getMyProfile(Number(userId));
+  }
+
+  @Patch('me/profile')
+  @UseInterceptors(CloudinaryFile('image', 'image'))
+  @ApiConsumes('multipart/form-data')
+  async updateMyProfile(
+    @Req() req: RequestWithUser,
+    @Body() dto: UpdateUserProfileDto,
+    @UploadedFile() file?: Express.Multer.File
+  ) {
+    const userId = req.user?.id;
+    let imageUrl: string | undefined;
+
+    if (file) {
+      const uploaded = await this.cloudinaryService.uploadBuffer(
+        file.buffer,
+        file.originalname
+      );
+      imageUrl = uploaded.secure_url;
+    }
+
+    if (!userId) {
+      throw new BadRequestException('User not authenticated');
+    }
+
+    return this.userService.updateMyProfile(userId, dto, imageUrl);
+  }
+
+  @Get('leaderboard')
+  @Public()
+  getLeaderboard(
+    @Query('timeframe') timeframe?: 'all_time' | 'weekly' | 'monthly',
+    @Query('limit') limit?: string,
+    @Req() req?: RequestWithUser
+  ) {
+    const parsedLimit =
+      typeof limit === 'string' && limit.trim() !== ''
+        ? Number(limit)
+        : undefined;
+    return this.userService.getLeaderboard(
+      timeframe ?? 'all_time',
+      parsedLimit ?? 20,
+      req?.user?.id
+    );
+  }
+
   constructor(
     private readonly userService: UserService,
     private readonly cloudinaryService: CloudinaryService
