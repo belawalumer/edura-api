@@ -22,10 +22,37 @@ import { UserRole } from '../common/enums';
 import { ApiConsumes, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { CloudinaryFile } from '../common/interceptors/cloudinary-upload-interceptor';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
+import { Public } from 'src/auth/decorators/public.decorator';
 
 @UseGuards(AuthGuard)
 @Controller('past-papers')
 export class PastPapersController {
+  @Get('public')
+  @Public()
+  async findPublic(
+    @Query() query: PaginationQueryDto,
+    @Query('grade_id') gradeId?: string,
+    @Query('subject_id') subjectId?: string,
+    @Query('board_id') boardId?: string,
+    @Query('category_id') categoryId?: string,
+    @Query('year') year?: string
+  ) {
+    return this.pastPapersService.findPublic({
+      ...query,
+      grade_id: gradeId ? Number(gradeId) : undefined,
+      subject_id: subjectId ? Number(subjectId) : undefined,
+      board_id: boardId ? Number(boardId) : undefined,
+      category_id: categoryId ? Number(categoryId) : undefined,
+      year: year ? Number(year) : undefined,
+    });
+  }
+
+  @Get('public/:id')
+  @Public()
+  async findPublicOne(@Param('id') id: number) {
+    return this.pastPapersService.findPublicOne(Number(id));
+  }
+
   constructor(
     private readonly pastPapersService: PastPapersService,
     private readonly cloudinaryService: CloudinaryService

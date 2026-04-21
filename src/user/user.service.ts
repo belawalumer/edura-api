@@ -8,15 +8,37 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { ChangePasswordDto, UpdateAdminDto } from './dto/user.dto';
-import { UserRole } from 'src/common/enums';
+import { TestStatus, UserRole } from 'src/common/enums';
 import { PaginationQueryDto } from 'src/common/dto';
+import { TestAttempt } from 'src/tests/entities/test_attempt.entity';
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(User)
-    private readonly userRepo: Repository<User>
+    private readonly userRepo: Repository<User>,
+    @InjectRepository(TestAttempt)
+    private readonly testAttemptRepo: Repository<TestAttempt>
   ) {}
+
+  async getMyProfile(id: number) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    return {
+      message: 'Profile retrieved successfully',
+      data: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        image: user.image ?? null,
+        role: user.role,
+        grade: user.grade ?? null,
+        total_coins: Number(user.total_coins ?? 0),
+      },
+    };
+  }
 
   async changePassword(id: number, dto: ChangePasswordDto) {
     const { currentPassword, newPassword } = dto;
@@ -56,6 +78,127 @@ export class UserService {
         name: user.name,
         phone: user.phone,
         image: user.image,
+      },
+    };
+  }
+
+  async updateMyProfile(
+    id: number,
+    dto: Partial<UpdateAdminDto>,
+    imageUrl?: string
+  ) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    user.name = dto.name ?? user.name;
+    user.phone = dto.phone ?? user.phone;
+    user.email = dto.email ?? user.email;
+
+    if (imageUrl) {
+      user.image = imageUrl;
+    }
+
+    await this.userRepo.save(user);
+
+    return {
+      message: 'Profile updated successfully',
+      data: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        image: user.image ?? null,
+        role: user.role,
+        grade: user.grade ?? null,
+        total_coins: Number(user.total_coins ?? 0),
+      },
+    };
+  }
+
+  async getLeaderboard(
+    timeframe: 'all_time' | 'weekly' | 'monthly' = 'all_time',
+    limit = 20,
+    authUserId?: number
+  ) {
+    const safeLimit = Math.min(Math.max(limit, 1), 100);
+
+    if (timeframe === 'all_time') {
+      const users = await this.userRepo.find({
+        where: { role: UserRole.USER, isSuspended: false },
+        order: { total_coins: 'DESC', id: 'ASC' },
+      });
+
+      const ranked = users.map((u, index) => ({
+        rank: index + 1,
+        user_id: u.id,
+        name: u.name,
+        image: u.image ?? null,
+        score: Number(u.total_coins ?? 0),
+      }));
+
+      const currentUser = authUserId
+        ? ranked.find((item) => item.user_id === authUserId) ?? null
+        : null;
+
+      return {
+        message: 'Leaderboard retrieved successfully',
+        data: {
+          timeframe,
+          items: ranked.slice(0, safeLimit),
+          currentUser,
+        },
+      };
+    }
+
+    const now = new Date();
+    const fromDate = new Date(now);
+    if (timeframe === 'weekly') {
+      fromDate.setDate(now.getDate() - 7);
+    } else {
+      fromDate.setDate(now.getDate() - 30);
+    }
+
+    const raw = await this.testAttemptRepo
+      .createQueryBuilder('attempt')
+      .innerJoin(User, 'user', 'user.id = attempt.user_id')
+      .select('attempt.user_id', 'user_id')
+      .addSelect('user.name', 'name')
+      .addSelect('user.image', 'image')
+      .addSelect('COALESCE(SUM(attempt.coins_earned), 0)', 'score')
+      .where('attempt.status = :status', { status: TestStatus.COMPLETED })
+      .andWhere('attempt.created_at >= :fromDate', { fromDate })
+      .andWhere('user.role = :role', { role: UserRole.USER })
+      .andWhere('user.isSuspended = false')
+      .groupBy('attempt.user_id')
+      .addGroupBy('user.name')
+      .addGroupBy('user.image')
+      .orderBy('score', 'DESC')
+      .addOrderBy('attempt.user_id', 'ASC')
+      .getRawMany<{
+        user_id: string;
+        name: string;
+        image: string | null;
+        score: string;
+      }>();
+
+    const ranked = raw.map((row, index) => ({
+      rank: index + 1,
+      user_id: Number(row.user_id),
+      name: row.name,
+      image: row.image ?? null,
+      score: Number(row.score ?? 0),
+    }));
+
+    const currentUser = authUserId
+      ? ranked.find((item) => item.user_id === authUserId) ?? null
+      : null;
+
+    return {
+      message: 'Leaderboard retrieved successfully',
+      data: {
+        timeframe,
+        items: ranked.slice(0, safeLimit),
+        currentUser,
       },
     };
   }

@@ -104,9 +104,87 @@ export class PastPapersService {
     };
   }
 
+  async findPublic(
+    query: PaginationQueryDto & {
+      grade_id?: number;
+      subject_id?: number;
+      board_id?: number;
+      category_id?: number;
+      year?: number;
+    }
+  ) {
+    const { page = 1, limit = 10, search } = query;
+
+    const qb = this.repo
+      .createQueryBuilder('paper')
+      .leftJoinAndSelect('paper.category', 'category')
+      .leftJoinAndSelect('paper.board', 'board')
+      .leftJoinAndSelect('paper.grade', 'grade')
+      .leftJoinAndSelect('paper.subject', 'subject')
+      .where('paper.status = :status', { status: Status.ACTIVE })
+      .orderBy('paper.year', 'DESC')
+      .addOrderBy('paper.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    if (query.grade_id != null) {
+      qb.andWhere('grade.id = :gradeId', { gradeId: query.grade_id });
+    }
+    if (query.subject_id != null) {
+      qb.andWhere('subject.id = :subjectId', { subjectId: query.subject_id });
+    }
+    if (query.board_id != null) {
+      qb.andWhere('board.id = :boardId', { boardId: query.board_id });
+    }
+    if (query.category_id != null) {
+      qb.andWhere('category.id = :categoryId', { categoryId: query.category_id });
+    }
+    if (query.year != null) {
+      qb.andWhere('paper.year = :year', { year: query.year });
+    }
+    if (search) {
+      qb.andWhere(
+        '(category.name ILIKE :search OR board.name ILIKE :search OR subject.name ILIKE :search)',
+        { search: `%${search}%` }
+      );
+    }
+
+    const [papers, total] = await qb.getManyAndCount();
+
+    return {
+      message: 'Past papers retrieved successfully',
+      data: {
+        items: papers,
+        meta: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+          hasMore: page * limit < total,
+        },
+      },
+    };
+  }
+
   async findOne(id: number) {
     const paper = await this.repo.findOne({
       where: { id },
+      relations: ['category', 'board', 'grade', 'subject'],
+    });
+
+    if (!paper) {
+      throw new NotFoundException('Past paper not found');
+    }
+
+    return {
+      message: 'Past paper retrieved successfully',
+      data: paper,
+    };
+  }
+
+  async findPublicOne(id: number) {
+    const paper = await this.repo.findOne({
+      where: { id, status: Status.ACTIVE },
       relations: ['category', 'board', 'grade', 'subject'],
     });
 
