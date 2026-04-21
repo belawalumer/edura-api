@@ -123,12 +123,16 @@ export class UserService {
     const safeLimit = Math.min(Math.max(limit, 1), 100);
 
     if (timeframe === 'all_time') {
-      const users = await this.userRepo.find({
-        where: { role: UserRole.USER, isSuspended: false },
-        order: { total_coins: 'DESC', id: 'ASC' },
-      });
+      const topUsers = await this.userRepo
+        .createQueryBuilder('user')
+        .where('user.role = :role', { role: UserRole.USER })
+        .andWhere('user.isSuspended = false')
+        .orderBy('user.total_coins', 'DESC')
+        .addOrderBy('user.id', 'ASC')
+        .take(safeLimit)
+        .getMany();
 
-      const ranked = users.map((u, index) => ({
+      const ranked = topUsers.map((u, index) => ({
         rank: index + 1,
         user_id: u.id,
         name: u.name,
@@ -136,15 +140,57 @@ export class UserService {
         score: Number(u.total_coins ?? 0),
       }));
 
-      const currentUser = authUserId
-        ? ranked.find((item) => item.user_id === authUserId) ?? null
-        : null;
+      let currentUser: {
+        rank: number;
+        user_id: number;
+        name: string;
+        image: string | null;
+        score: number;
+      } | null = null;
+
+      if (authUserId) {
+        const inTop = ranked.find((item) => item.user_id === authUserId);
+        if (inTop) {
+          currentUser = inTop;
+        } else {
+          const me = await this.userRepo.findOne({
+            where: {
+              id: authUserId,
+              role: UserRole.USER,
+              isSuspended: false,
+            },
+          });
+
+          if (me) {
+            const higherCount = await this.userRepo
+              .createQueryBuilder('u')
+              .where('u.role = :role', { role: UserRole.USER })
+              .andWhere('u.isSuspended = false')
+              .andWhere(
+                '(u.total_coins > :coins OR (u.total_coins = :coins AND u.id < :id))',
+                {
+                  coins: Number(me.total_coins ?? 0),
+                  id: me.id,
+                }
+              )
+              .getCount();
+
+            currentUser = {
+              rank: higherCount + 1,
+              user_id: me.id,
+              name: me.name,
+              image: me.image ?? null,
+              score: Number(me.total_coins ?? 0),
+            };
+          }
+        }
+      }
 
       return {
         message: 'Leaderboard retrieved successfully',
         data: {
           timeframe,
-          items: ranked.slice(0, safeLimit),
+          items: ranked,
           currentUser,
         },
       };
@@ -158,7 +204,7 @@ export class UserService {
       fromDate.setDate(now.getDate() - 30);
     }
 
-    const raw = await this.testAttemptRepo
+    const leaderboardQb = this.testAttemptRepo
       .createQueryBuilder('attempt')
       .innerJoin(User, 'user', 'user.id = attempt.user_id')
       .select('attempt.user_id', 'user_id')
@@ -174,12 +220,14 @@ export class UserService {
       .addGroupBy('user.image')
       .orderBy('score', 'DESC')
       .addOrderBy('attempt.user_id', 'ASC')
-      .getRawMany<{
-        user_id: string;
-        name: string;
-        image: string | null;
-        score: string;
-      }>();
+      .take(safeLimit);
+
+    const raw = await leaderboardQb.getRawMany<{
+      user_id: string;
+      name: string;
+      image: string | null;
+      score: string;
+    }>();
 
     const ranked = raw.map((row, index) => ({
       rank: index + 1,
@@ -189,15 +237,87 @@ export class UserService {
       score: Number(row.score ?? 0),
     }));
 
-    const currentUser = authUserId
-      ? ranked.find((item) => item.user_id === authUserId) ?? null
-      : null;
+    let currentUser: {
+      rank: number;
+      user_id: number;
+      name: string;
+      image: string | null;
+      score: number;
+    } | null = null;
+
+    if (authUserId) {
+      const inTop = ranked.find((item) => item.user_id === authUserId);
+      if (inTop) {
+        currentUser = inTop;
+      } else {
+        const meAgg = await this.testAttemptRepo
+          .createQueryBuilder('attempt')
+          .innerJoin(User, 'user', 'user.id = attempt.user_id')
+          .select('attempt.user_id', 'user_id')
+          .addSelect('user.name', 'name')
+          .addSelect('user.image', 'image')
+          .addSelect('COALESCE(SUM(attempt.coins_earned), 0)', 'score')
+          .where('attempt.status = :status', { status: TestStatus.COMPLETED })
+          .andWhere('attempt.created_at >= :fromDate', { fromDate })
+          .andWhere('user.role = :role', { role: UserRole.USER })
+          .andWhere('user.isSuspended = false')
+          .andWhere('attempt.user_id = :authUserId', { authUserId })
+          .groupBy('attempt.user_id')
+          .addGroupBy('user.name')
+          .addGroupBy('user.image')
+          .getRawOne<{
+            user_id: string;
+            name: string;
+            image: string | null;
+            score: string;
+          }>();
+
+        if (meAgg) {
+          const score = Number(meAgg.score ?? 0);
+          const tieUserId = Number(meAgg.user_id);
+
+          const aggregateQb = this.testAttemptRepo
+            .createQueryBuilder('attempt')
+            .innerJoin(User, 'user', 'user.id = attempt.user_id')
+            .select('attempt.user_id', 'user_id')
+            .addSelect('COALESCE(SUM(attempt.coins_earned), 0)', 'score')
+            .where('attempt.status = :status', { status: TestStatus.COMPLETED })
+            .andWhere('attempt.created_at >= :fromDate', { fromDate })
+            .andWhere('user.role = :role', { role: UserRole.USER })
+            .andWhere('user.isSuspended = false')
+            .groupBy('attempt.user_id');
+
+          const higherCountRow = await this.testAttemptRepo.manager
+            .createQueryBuilder()
+            .select('COUNT(*)', 'higher_count')
+            .from(`(${aggregateQb.getQuery()})`, 'lb')
+            .where(
+              '(lb.score::numeric > :score OR (lb.score::numeric = :score AND lb.user_id::int < :tieUserId))',
+              {
+                score,
+                tieUserId,
+              }
+            )
+            .setParameters(aggregateQb.getParameters())
+            .getRawOne<{ higher_count: string }>();
+
+          const higherCount = Number(higherCountRow?.higher_count ?? 0);
+          currentUser = {
+            rank: higherCount + 1,
+            user_id: tieUserId,
+            name: meAgg.name,
+            image: meAgg.image ?? null,
+            score,
+          };
+        }
+      }
+    }
 
     return {
       message: 'Leaderboard retrieved successfully',
       data: {
         timeframe,
-        items: ranked.slice(0, safeLimit),
+        items: ranked,
         currentUser,
       },
     };
