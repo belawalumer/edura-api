@@ -153,11 +153,17 @@ export class DashboardService {
     );
     let streak = 0;
     const cursor = new Date();
-    while (true) {
-      const key = `${cursor.getFullYear()}-${cursor.getMonth()}-${cursor.getDate()}`;
-      if (!byDay.has(key)) break;
+    let key = `${cursor.getFullYear()}-${cursor.getMonth()}-${cursor.getDate()}`;
+
+    if (!byDay.has(key)) {
+      cursor.setDate(cursor.getDate() - 1);
+      key = `${cursor.getFullYear()}-${cursor.getMonth()}-${cursor.getDate()}`;
+    }
+
+    while (byDay.has(key)) {
       streak += 1;
       cursor.setDate(cursor.getDate() - 1);
+      key = `${cursor.getFullYear()}-${cursor.getMonth()}-${cursor.getDate()}`;
     }
 
     const testScores = attempts.slice(0, 5).reverse().map((attempt, index) => {
