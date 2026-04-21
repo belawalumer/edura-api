@@ -1,6 +1,10 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { LoginDto, RefreshTokenDto } from './dto/create-auth.dto';
+import {
+  LoginDto,
+  RefreshTokenDto,
+  SocialLoginDto,
+} from './dto/create-auth.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -14,5 +18,10 @@ export class AuthController {
   @Post('refresh-token')
   async refresh(@Body() body: RefreshTokenDto) {
     return this.authService.refreshToken(body.refreshToken);
+  }
+
+  @Post('social-login')
+  async socialLogin(@Body() body: SocialLoginDto) {
+    return this.authService.socialLogin(body.token, body.provider);
   }
 }

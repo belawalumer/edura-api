@@ -18,3 +18,13 @@ export class RefreshTokenDto {
   @IsNotEmpty()
   refreshToken: string;
 }
+
+export class SocialLoginDto {
+  @ApiProperty({ example: 'supabase-access-token' })
+  @IsNotEmpty()
+  token: string;
+
+  @ApiProperty({ example: 'google' })
+  @IsNotEmpty()
+  provider: 'google' | 'facebook';
+}
