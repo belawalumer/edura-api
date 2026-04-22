@@ -28,6 +28,8 @@ import { ExamCategory } from './src/exam-category/entities/exam-category.entity'
 import { PastPaper } from './src/past-papers/entities/past-paper.entity';
 import { University } from './src/universities/entities/university.entity';
 import { UniversityMerit } from './src/universities/entities/university-merit.entity';
+import { College } from './src/colleges/entities/college.entity';
+import { CollegeMerit } from './src/colleges/entities/college-merit.entity';
 
 type QuestionSeed = {
   title: string;
@@ -329,6 +331,53 @@ async function ensureUniversityWithMerits(
   }
 }
 
+async function ensureCollegeWithMerits(
+  collegeRepo: Repository<College>,
+  meritRepo: Repository<CollegeMerit>,
+  payload: {
+    name: string;
+    city: string;
+    merits: { degree: string; lastYearClosingMerit: number }[];
+  }
+) {
+  let college = await collegeRepo
+    .createQueryBuilder('college')
+    .where('LOWER(college.name) = LOWER(:name)', { name: payload.name })
+    .getOne();
+
+  if (!college) {
+    college = await collegeRepo.save(
+      collegeRepo.create({
+        name: payload.name,
+        city: payload.city,
+      })
+    );
+  } else if (college.city !== payload.city) {
+    college.city = payload.city;
+    college = await collegeRepo.save(college);
+  }
+
+  for (const merit of payload.merits) {
+    const exists = await meritRepo.findOne({
+      where: {
+        college: { id: college.id },
+        degree: merit.degree,
+      },
+      relations: ['college'],
+    });
+
+    if (exists) continue;
+
+    await meritRepo.save(
+      meritRepo.create({
+        college,
+        degree: merit.degree,
+        lastYearClosingMerit: merit.lastYearClosingMerit,
+      })
+    );
+  }
+}
+
 async function seed() {
   try {
     await AppDataSource.initialize();
@@ -352,6 +401,8 @@ async function seed() {
     const pastPaperRepo = AppDataSource.getRepository(PastPaper);
     const universityRepo = AppDataSource.getRepository(University);
     const universityMeritRepo = AppDataSource.getRepository(UniversityMerit);
+    const collegeRepo = AppDataSource.getRepository(College);
+    const collegeMeritRepo = AppDataSource.getRepository(CollegeMerit);
 
     // FAQs
     await ensureFaq(
@@ -1001,6 +1052,26 @@ async function seed() {
 
     for (const item of universitySeed) {
       await ensureUniversityWithMerits(universityRepo, universityMeritRepo, item);
+    }
+
+    // Colleges + merit lists (after Matric)
+    const collegeSeed = [
+      { name: 'Government College Lahore', city: 'Lahore', merits: [{ degree: 'FSc Pre-Medical', lastYearClosingMerit: 89.5 }, { degree: 'FSc Pre-Engineering', lastYearClosingMerit: 87.8 }, { degree: 'ICS Computer Science', lastYearClosingMerit: 84.6 }] },
+      { name: 'Punjab College Lahore', city: 'Lahore', merits: [{ degree: 'FSc Pre-Medical', lastYearClosingMerit: 86.2 }, { degree: 'FSc Pre-Engineering', lastYearClosingMerit: 84.9 }, { degree: 'ICOM', lastYearClosingMerit: 79.4 }] },
+      { name: 'Kinnaird College Lahore', city: 'Lahore', merits: [{ degree: 'FA Humanities', lastYearClosingMerit: 76.5 }, { degree: 'ICS Statistics', lastYearClosingMerit: 78.2 }, { degree: 'FSc Pre-Medical', lastYearClosingMerit: 82.1 }] },
+      { name: 'Islamia College Peshawar', city: 'Peshawar', merits: [{ degree: 'FSc Pre-Medical', lastYearClosingMerit: 84.8 }, { degree: 'FSc Pre-Engineering', lastYearClosingMerit: 82.4 }, { degree: 'FA Arts', lastYearClosingMerit: 74.3 }] },
+      { name: 'Edwards College Peshawar', city: 'Peshawar', merits: [{ degree: 'ICS Computer Science', lastYearClosingMerit: 79.7 }, { degree: 'ICOM', lastYearClosingMerit: 75.1 }, { degree: 'FA Humanities', lastYearClosingMerit: 72.8 }] },
+      { name: 'Government College University Intermediate Wing', city: 'Faisalabad', merits: [{ degree: 'FSc Pre-Medical', lastYearClosingMerit: 85.2 }, { degree: 'FSc Pre-Engineering', lastYearClosingMerit: 83.9 }, { degree: 'ICS Computer Science', lastYearClosingMerit: 80.5 }] },
+      { name: 'Government College for Boys Rawalpindi', city: 'Rawalpindi', merits: [{ degree: 'FSc Pre-Medical', lastYearClosingMerit: 83.1 }, { degree: 'FSc Pre-Engineering', lastYearClosingMerit: 81.2 }, { degree: 'ICOM', lastYearClosingMerit: 74.9 }] },
+      { name: 'Punjab Group of Colleges Rawalpindi', city: 'Rawalpindi', merits: [{ degree: 'FSc Pre-Medical', lastYearClosingMerit: 82.7 }, { degree: 'ICS Computer Science', lastYearClosingMerit: 79.9 }, { degree: 'FA Arts', lastYearClosingMerit: 71.4 }] },
+      { name: 'DJ Science College', city: 'Karachi', merits: [{ degree: 'FSc Pre-Engineering', lastYearClosingMerit: 86.6 }, { degree: 'FSc Pre-Medical', lastYearClosingMerit: 85.3 }, { degree: 'ICS Computer Science', lastYearClosingMerit: 81.8 }] },
+      { name: 'Adamjee Government Science College', city: 'Karachi', merits: [{ degree: 'FSc Pre-Medical', lastYearClosingMerit: 88.1 }, { degree: 'FSc Pre-Engineering', lastYearClosingMerit: 87.0 }, { degree: 'ICOM', lastYearClosingMerit: 77.3 }] },
+      { name: 'Government College Women University Sialkot - College Section', city: 'Sialkot', merits: [{ degree: 'FSc Pre-Medical', lastYearClosingMerit: 80.3 }, { degree: 'ICS Computer Science', lastYearClosingMerit: 76.9 }, { degree: 'FA Humanities', lastYearClosingMerit: 70.2 }] },
+      { name: 'Government Emerson College', city: 'Multan', merits: [{ degree: 'FSc Pre-Medical', lastYearClosingMerit: 83.8 }, { degree: 'FSc Pre-Engineering', lastYearClosingMerit: 81.6 }, { degree: 'ICS Computer Science', lastYearClosingMerit: 78.7 }] },
+    ];
+
+    for (const item of collegeSeed) {
+      await ensureCollegeWithMerits(collegeRepo, collegeMeritRepo, item);
     }
 
     // Past papers and exam categories
