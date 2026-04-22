@@ -16,6 +16,7 @@ import { PastPapersService } from './past-papers.service';
 import { CreatePastPaperDto } from './dto/create-past-paper.dto';
 import { UpdatePastPaperDto } from './dto/update-past-paper.dto';
 import { PaginationQueryDto } from 'src/common/dto';
+import { PublicPastPapersQueryDto } from './dto/public-past-papers-query.dto';
 import { AuthGuard } from '../auth/guard/auth_guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums';
@@ -29,22 +30,8 @@ import { Public } from 'src/auth/decorators/public.decorator';
 export class PastPapersController {
   @Get('public')
   @Public()
-  async findPublic(
-    @Query() query: PaginationQueryDto,
-    @Query('grade_id') gradeId?: string,
-    @Query('subject_id') subjectId?: string,
-    @Query('board_id') boardId?: string,
-    @Query('category_id') categoryId?: string,
-    @Query('year') year?: string
-  ) {
-    return this.pastPapersService.findPublic({
-      ...query,
-      grade_id: gradeId ? Number(gradeId) : undefined,
-      subject_id: subjectId ? Number(subjectId) : undefined,
-      board_id: boardId ? Number(boardId) : undefined,
-      category_id: categoryId ? Number(categoryId) : undefined,
-      year: year ? Number(year) : undefined,
-    });
+  async findPublic(@Query() query: PublicPastPapersQueryDto) {
+    return this.pastPapersService.findPublic(query);
   }
 
   @Get('public/:id')

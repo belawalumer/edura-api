@@ -13,6 +13,7 @@ import { Status } from 'src/common/enums';
 import { ExamCategory } from '../exam-category/entities/exam-category.entity';
 import { Grade } from '../grades/entities/grade.entity';
 import { Subject } from '../subjects/entities/subject.entity';
+import { PublicPastPapersQueryDto } from './dto/public-past-papers-query.dto';
 
 @Injectable()
 export class PastPapersService {
@@ -104,15 +105,7 @@ export class PastPapersService {
     };
   }
 
-  async findPublic(
-    query: PaginationQueryDto & {
-      grade_id?: number;
-      subject_id?: number;
-      board_id?: number;
-      category_id?: number;
-      year?: number;
-    }
-  ) {
+  async findPublic(query: PublicPastPapersQueryDto) {
     const { page = 1, limit = 10, search } = query;
 
     const qb = this.repo
