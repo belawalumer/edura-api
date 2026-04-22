@@ -93,6 +93,7 @@ export class UserService {
     user.name = dto.name ?? user.name;
     user.phone = dto.phone ?? user.phone;
     user.email = dto.email ?? user.email;
+    user.grade = dto.grade ?? user.grade;
 
     if (imageUrl) {
       user.image = imageUrl;

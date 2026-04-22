@@ -16,6 +16,10 @@ export class UpdateAdminDto {
   @IsOptional()
   @IsString()
   email?: string;
+
+  @IsOptional()
+  @IsString()
+  grade?: string;
 }
 
 export class UpdateUserProfileDto {
@@ -30,6 +34,10 @@ export class UpdateUserProfileDto {
   @IsOptional()
   @IsString()
   email?: string;
+
+  @IsOptional()
+  @IsString()
+  grade?: string;
 }
 
 export class ChangePasswordDto {
