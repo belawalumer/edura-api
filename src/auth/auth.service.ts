@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createClient } from '@supabase/supabase-js';
 import { UserRole } from 'src/common/enums';
+import { SignupDto } from './dto/create-auth.dto';
 
 @Injectable()
 export class AuthService {
@@ -22,6 +23,58 @@ export class AuthService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>
   ) {}
+
+  async signup(body: SignupDto) {
+    const email = body.email?.trim().toLowerCase();
+    const password = body.password?.trim();
+    const name = body.name?.trim();
+
+    if (!email || !password || !name) {
+      throw new BadRequestException('Name, email and password are required');
+    }
+
+    if (password.length < 6) {
+      throw new BadRequestException('Password must be at least 6 characters');
+    }
+
+    const existingUser = await this.userRepo.findOne({ where: { email } });
+    if (existingUser) {
+      throw new BadRequestException('Email already registered');
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const refreshToken = generateRefreshToken();
+
+    const user = this.userRepo.create({
+      name,
+      email,
+      password: hashedPassword,
+      role: UserRole.USER,
+      // users.phone is non-nullable and unique in current schema.
+      phone: `email-${Date.now()}`,
+      refreshToken,
+    });
+
+    await this.userRepo.save(user);
+
+    const accessToken = generateToken(user);
+
+    return {
+      message: 'Signup successful',
+      accessToken,
+      refreshToken: user.refreshToken,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        role: user.role,
+        email: user.email,
+        name: user.name,
+        image: user.image ?? null,
+        grade: user.grade ?? null,
+        total_coins: Number(user.total_coins ?? 0),
+      },
+    };
+  }
 
   async login(email: string, password: string) {
     if (email) {
@@ -124,5 +177,14 @@ export class AuthService {
         total_coins: Number(user.total_coins ?? 0),
       },
     };
+  }
+
+  async logout(userId?: number) {
+    if (!userId) {
+      throw new BadRequestException('User not authenticated');
+    }
+
+    await this.userRepo.update({ id: userId }, { refreshToken: null });
+    return { message: 'Logout successful' };
   }
 }
