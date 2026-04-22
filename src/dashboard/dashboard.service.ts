@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Test } from '../tests/entities/test.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -114,6 +114,79 @@ export class DashboardService {
           image: user.image ?? null,
           score: Number(user.total_coins ?? 0),
         })),
+      },
+    };
+  }
+
+  async getAnnouncementById(id: number) {
+    const announcement = await this.announcementRepo.findOne({
+      where: { id, status: Status.ACTIVE },
+    });
+
+    if (!announcement) {
+      throw new NotFoundException('Announcement not found');
+    }
+
+    return {
+      message: 'Announcement retrieved successfully',
+      data: announcement,
+    };
+  }
+
+  async getNotifications(authUserId: number) {
+    const [recentAnnouncements, recentJobs, inProgressAttempts] = await Promise.all([
+      this.announcementRepo.find({
+        where: { status: Status.ACTIVE },
+        order: { activeFrom: 'DESC' },
+        take: 3,
+      }),
+      this.jobRepo.find({
+        where: { status: Status.ACTIVE },
+        order: { created_at: 'DESC' },
+        take: 3,
+      }),
+      this.testAttemptRepo.find({
+        where: { user_id: authUserId, status: TestStatus.IN_PROGRESS },
+        relations: ['test'],
+        order: { created_at: 'DESC' },
+        take: 2,
+      }),
+    ]);
+
+    const items = [
+      ...recentAnnouncements.map((item) => ({
+        id: `announcement-${item.id}`,
+        type: 'Announcements',
+        title: item.title,
+        description: item.description,
+        createdAt: item.activeFrom,
+        to: `/announcements/${item.id}`,
+      })),
+      ...recentJobs.map((job) => ({
+        id: `jobs-${job.id}`,
+        type: 'Jobs',
+        title: `New job: ${job.title}`,
+        description: 'A new opportunity is now available. Tap to view details.',
+        createdAt: job.created_at,
+        to: `/jobs`,
+      })),
+      ...inProgressAttempts.map((attempt) => ({
+        id: `tests-${attempt.id}`,
+        type: 'Tests',
+        title: `Resume ${attempt.test?.title ?? 'your test'}`,
+        description: 'You have an in-progress test waiting for completion.',
+        createdAt: attempt.created_at,
+        to: `/tests`,
+      })),
+    ].sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    return {
+      message: 'Notifications retrieved successfully',
+      data: {
+        items,
       },
     };
   }

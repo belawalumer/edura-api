@@ -5,6 +5,7 @@ dotenv.config();
 import { IsNull, Repository } from 'typeorm';
 import { AppDataSource } from './src/data-source';
 import {
+  ContentType,
   EmploymentStatus,
   Gender,
   Status,
@@ -30,6 +31,7 @@ import { University } from './src/universities/entities/university.entity';
 import { UniversityMerit } from './src/universities/entities/university-merit.entity';
 import { College } from './src/colleges/entities/college.entity';
 import { CollegeMerit } from './src/colleges/entities/college-merit.entity';
+import { BannersAnnouncement } from './src/banners_announcements/entities/banners_announcement.entity';
 
 type QuestionSeed = {
   title: string;
@@ -62,6 +64,29 @@ async function ensureFaq(
 
   if (existing) return existing;
   return await repo.save(repo.create({ title, description, visibility }));
+}
+
+async function ensureAnnouncement(
+  repo: Repository<BannersAnnouncement>,
+  payload: {
+    title: string;
+    description: string;
+    type: ContentType;
+    activeFrom: Date;
+    activeTill: Date;
+    status: Status;
+    ctaLink?: string;
+    image?: string;
+  }
+) {
+  const existing = await repo
+    .createQueryBuilder('announcement')
+    .where('LOWER(announcement.title) = LOWER(:title)', { title: payload.title })
+    .getOne();
+
+  if (existing) return existing;
+
+  return await repo.save(repo.create(payload));
 }
 
 async function ensureGradeSubject(
@@ -403,6 +428,7 @@ async function seed() {
     const universityMeritRepo = AppDataSource.getRepository(UniversityMerit);
     const collegeRepo = AppDataSource.getRepository(College);
     const collegeMeritRepo = AppDataSource.getRepository(CollegeMerit);
+    const announcementRepo = AppDataSource.getRepository(BannersAnnouncement);
 
     // FAQs
     await ensureFaq(
@@ -430,6 +456,41 @@ async function seed() {
       'Which boards are covered in past papers?',
       'Past papers include boards commonly used in Pakistan such as BISE Lahore, BISE Karachi, and FBISE Islamabad.'
     );
+
+    // Internet-sourced announcements
+    await ensureAnnouncement(announcementRepo, {
+      title: 'HEC opens HAT registrations for graduate admissions',
+      description:
+        'HEC announced registrations for the Higher Education Aptitude Test, used for MS/MPhil/PhD admissions and scholarships.',
+      type: ContentType.ANNOUNCEMENT,
+      activeFrom: new Date('2026-03-17'),
+      activeTill: new Date('2026-12-31'),
+      status: Status.ACTIVE,
+      ctaLink: 'https://propakistani.pk/2026/03/17/hec-opens-registrations-for-higher-education-aptitude-test/',
+      image: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1',
+    });
+    await ensureAnnouncement(announcementRepo, {
+      title: 'PMDC introduces MDCAT 2026 biometric requirement',
+      description:
+        'PMDC has introduced mandatory biometric verification and document requirements for MDCAT 2026 candidates.',
+      type: ContentType.ANNOUNCEMENT,
+      activeFrom: new Date('2026-04-16'),
+      activeTill: new Date('2026-12-31'),
+      status: Status.ACTIVE,
+      ctaLink: 'https://propakistani.pk/2026/04/16/pmdc-introduces-mandatory-requirement-for-mdcat-2026/',
+      image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b',
+    });
+    await ensureAnnouncement(announcementRepo, {
+      title: 'UET ECAT Fall 2026 phase-2 registration details',
+      description:
+        'UET has published phase-2 ECAT dates, registration timeline, and test schedule for Fall 2026 engineering admissions.',
+      type: ContentType.ANNOUNCEMENT,
+      activeFrom: new Date('2026-04-15'),
+      activeTill: new Date('2026-12-31'),
+      status: Status.ACTIVE,
+      ctaLink: 'https://www.uet.edu.pk/newsannouncement/Event/ECAT-Fall-2026-Phase-2-Registration-Details-2026.04.15/?instancedate=1776245032000',
+      image: 'https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e',
+    });
 
     // Base taxonomy for tests
     const subjectTestsCategory = await ensureByName(categoryRepo, 'subject tests');
