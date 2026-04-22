@@ -6,7 +6,8 @@ import {
   SignupDto,
   SocialLoginDto,
 } from './dto/create-auth.dto';
-import { AuthGuard, RequestWithUser } from './guard/auth_guard';
+import { AuthGuard } from './guard/auth_guard';
+import type { RequestWithUser } from './guard/auth_guard';
 
 @Controller('auth')
 export class AuthController {

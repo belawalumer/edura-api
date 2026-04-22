@@ -1,4 +1,4 @@
-import { UserRole } from '../../common/enums';
+import { UserRole } from '../../common/enums/index';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -35,8 +35,8 @@ export class User {
   })
   role: UserRole;
 
-  @Column({ nullable: true })
-  refreshToken?: string;
+  @Column({ type: 'varchar', nullable: true })
+  refreshToken?: string | null;
 
   @Column({ nullable: true })
   grade?: string;
