@@ -26,6 +26,8 @@ import { Job } from './src/jobs/entities/job.entity';
 import { JobPreferredCandidate } from './src/jobs/entities/job_preferred_candidates.entity';
 import { ExamCategory } from './src/exam-category/entities/exam-category.entity';
 import { PastPaper } from './src/past-papers/entities/past-paper.entity';
+import { University } from './src/universities/entities/university.entity';
+import { UniversityMerit } from './src/universities/entities/university-merit.entity';
 
 type QuestionSeed = {
   title: string;
@@ -280,6 +282,53 @@ async function ensureExamCategory(
   return await repo.save(entity);
 }
 
+async function ensureUniversityWithMerits(
+  universityRepo: Repository<University>,
+  meritRepo: Repository<UniversityMerit>,
+  payload: {
+    name: string;
+    city: string;
+    merits: { degree: string; lastYearClosingMerit: number }[];
+  }
+) {
+  let university = await universityRepo
+    .createQueryBuilder('university')
+    .where('LOWER(university.name) = LOWER(:name)', { name: payload.name })
+    .getOne();
+
+  if (!university) {
+    university = await universityRepo.save(
+      universityRepo.create({
+        name: payload.name,
+        city: payload.city,
+      })
+    );
+  } else if (university.city !== payload.city) {
+    university.city = payload.city;
+    university = await universityRepo.save(university);
+  }
+
+  for (const merit of payload.merits) {
+    const exists = await meritRepo.findOne({
+      where: {
+        university: { id: university.id },
+        degree: merit.degree,
+      },
+      relations: ['university'],
+    });
+
+    if (exists) continue;
+
+    await meritRepo.save(
+      meritRepo.create({
+        university,
+        degree: merit.degree,
+        lastYearClosingMerit: merit.lastYearClosingMerit,
+      })
+    );
+  }
+}
+
 async function seed() {
   try {
     await AppDataSource.initialize();
@@ -301,6 +350,8 @@ async function seed() {
     const preferredRepo = AppDataSource.getRepository(JobPreferredCandidate);
     const examCategoryRepo = AppDataSource.getRepository(ExamCategory);
     const pastPaperRepo = AppDataSource.getRepository(PastPaper);
+    const universityRepo = AppDataSource.getRepository(University);
+    const universityMeritRepo = AppDataSource.getRepository(UniversityMerit);
 
     // FAQs
     await ensureFaq(
@@ -904,6 +955,52 @@ async function seed() {
           })
         );
       }
+    }
+
+    // Universities + merit lists
+    const universitySeed = [
+      { name: 'National University of Sciences and Technology (NUST)', city: 'Islamabad', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 79.2 }, { degree: 'BS Software Engineering', lastYearClosingMerit: 78.6 }, { degree: 'BS Electrical Engineering', lastYearClosingMerit: 74.4 }] },
+      { name: 'Quaid-i-Azam University (QAU)', city: 'Islamabad', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 84.0 }, { degree: 'BS Mathematics', lastYearClosingMerit: 82.3 }, { degree: 'BS Physics', lastYearClosingMerit: 79.1 }] },
+      { name: 'COMSATS University Islamabad', city: 'Islamabad', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 86.1 }, { degree: 'BS Software Engineering', lastYearClosingMerit: 84.5 }, { degree: 'BS Electrical Engineering', lastYearClosingMerit: 80.8 }] },
+      { name: 'International Islamic University Islamabad (IIUI)', city: 'Islamabad', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 73.2 }, { degree: 'BS Mathematics', lastYearClosingMerit: 70.4 }, { degree: 'BS Economics', lastYearClosingMerit: 68.75 }] },
+      { name: 'National University of Modern Languages (NUML)', city: 'Islamabad', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 71.4 }, { degree: 'BS Software Engineering', lastYearClosingMerit: 69.85 }, { degree: 'BBA', lastYearClosingMerit: 67.3 }] },
+      { name: 'Air University', city: 'Islamabad', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 82.2 }, { degree: 'BS Cyber Security', lastYearClosingMerit: 80.6 }, { degree: 'BS Aerospace Engineering', lastYearClosingMerit: 76.9 }] },
+      { name: 'University of the Punjab', city: 'Lahore', merits: [{ degree: 'BS Information Technology', lastYearClosingMerit: 85.4 }, { degree: 'BS Commerce', lastYearClosingMerit: 78.0 }, { degree: 'BS Economics', lastYearClosingMerit: 81.5 }] },
+      { name: 'University of Engineering and Technology (UET Lahore)', city: 'Lahore', merits: [{ degree: 'BSc Civil Engineering', lastYearClosingMerit: 86.9 }, { degree: 'BSc Mechanical Engineering', lastYearClosingMerit: 85.3 }, { degree: 'BSc Computer Engineering', lastYearClosingMerit: 84.1 }] },
+      { name: 'Lahore University of Management Sciences (LUMS)', city: 'Lahore', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 89.2 }, { degree: 'BSc Economics', lastYearClosingMerit: 87.4 }, { degree: 'BBA', lastYearClosingMerit: 86.9 }] },
+      { name: 'Government College University Lahore', city: 'Lahore', merits: [{ degree: 'BS Chemistry', lastYearClosingMerit: 77.8 }, { degree: 'BS Physics', lastYearClosingMerit: 79.2 }, { degree: 'BS Zoology', lastYearClosingMerit: 74.1 }] },
+      { name: 'University of Lahore', city: 'Lahore', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 72.4 }, { degree: 'Doctor of Physical Therapy', lastYearClosingMerit: 75.6 }, { degree: 'BBA', lastYearClosingMerit: 69.5 }] },
+      { name: 'University of Central Punjab', city: 'Lahore', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 74.3 }, { degree: 'BS Software Engineering', lastYearClosingMerit: 72.2 }, { degree: 'BBA', lastYearClosingMerit: 70.1 }] },
+      { name: 'University of Karachi', city: 'Karachi', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 78.5 }, { degree: 'BS Biotechnology', lastYearClosingMerit: 76.2 }, { degree: 'BBA', lastYearClosingMerit: 73.0 }] },
+      { name: 'NED University of Engineering and Technology', city: 'Karachi', merits: [{ degree: 'BE Software Engineering', lastYearClosingMerit: 87.4 }, { degree: 'BE Electrical Engineering', lastYearClosingMerit: 84.9 }, { degree: 'BE Mechanical Engineering', lastYearClosingMerit: 82.6 }] },
+      { name: 'Institute of Business Administration (IBA Karachi)', city: 'Karachi', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 83.8 }, { degree: 'BBA', lastYearClosingMerit: 82.4 }, { degree: 'BS Economics and Mathematics', lastYearClosingMerit: 80.7 }] },
+      { name: 'Dow University of Health Sciences', city: 'Karachi', merits: [{ degree: 'MBBS', lastYearClosingMerit: 91.5 }, { degree: 'BDS', lastYearClosingMerit: 89.3 }, { degree: 'Doctor of Pharmacy', lastYearClosingMerit: 84.6 }] },
+      { name: 'FAST NUCES Karachi', city: 'Karachi', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 84.7 }, { degree: 'BS Software Engineering', lastYearClosingMerit: 83.2 }, { degree: 'BS Artificial Intelligence', lastYearClosingMerit: 82.1 }] },
+      { name: 'Sir Syed University of Engineering and Technology', city: 'Karachi', merits: [{ degree: 'BE Civil Engineering', lastYearClosingMerit: 70.9 }, { degree: 'BE Computer Engineering', lastYearClosingMerit: 73.4 }, { degree: 'BE Electrical Engineering', lastYearClosingMerit: 71.6 }] },
+      { name: 'University of Peshawar', city: 'Peshawar', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 74.8 }, { degree: 'BS Statistics', lastYearClosingMerit: 72.9 }, { degree: 'BBA', lastYearClosingMerit: 70.5 }] },
+      { name: 'University of Engineering and Technology Peshawar', city: 'Peshawar', merits: [{ degree: 'BSc Civil Engineering', lastYearClosingMerit: 81.3 }, { degree: 'BSc Mechanical Engineering', lastYearClosingMerit: 79.7 }, { degree: 'BSc Electrical Engineering', lastYearClosingMerit: 78.2 }] },
+      { name: 'Institute of Management Sciences (IMSciences)', city: 'Peshawar', merits: [{ degree: 'BBA', lastYearClosingMerit: 76.1 }, { degree: 'BS Accounting and Finance', lastYearClosingMerit: 74.2 }, { degree: 'BS Computer Science', lastYearClosingMerit: 73.6 }] },
+      { name: 'Khyber Medical University', city: 'Peshawar', merits: [{ degree: 'MBBS', lastYearClosingMerit: 90.8 }, { degree: 'BDS', lastYearClosingMerit: 88.2 }, { degree: 'Doctor of Physical Therapy', lastYearClosingMerit: 81.4 }] },
+      { name: 'Bahauddin Zakariya University (BZU)', city: 'Multan', merits: [{ degree: 'BS Information Technology', lastYearClosingMerit: 77.4 }, { degree: 'BS Economics', lastYearClosingMerit: 75.8 }, { degree: 'BBA', lastYearClosingMerit: 73.6 }] },
+      { name: 'NFC Institute of Engineering and Technology', city: 'Multan', merits: [{ degree: 'BSc Chemical Engineering', lastYearClosingMerit: 74.2 }, { degree: 'BSc Electrical Engineering', lastYearClosingMerit: 72.8 }, { degree: 'BSc Mechanical Engineering', lastYearClosingMerit: 71.1 }] },
+      { name: 'The Women University Multan', city: 'Multan', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 71.5 }, { degree: 'BS Psychology', lastYearClosingMerit: 69.8 }, { degree: 'BBA', lastYearClosingMerit: 68.2 }] },
+      { name: 'Muhammad Nawaz Shareef University of Agriculture', city: 'Multan', merits: [{ degree: 'BS Agriculture', lastYearClosingMerit: 75.6 }, { degree: 'BS Food Science and Technology', lastYearClosingMerit: 73.2 }, { degree: 'BS Environmental Sciences', lastYearClosingMerit: 71.4 }] },
+      { name: 'University of Agriculture Faisalabad', city: 'Faisalabad', merits: [{ degree: 'BSc Agriculture', lastYearClosingMerit: 86.2 }, { degree: 'DVM', lastYearClosingMerit: 88.6 }, { degree: 'BS Food Science and Technology', lastYearClosingMerit: 82.1 }] },
+      { name: 'Government College University Faisalabad', city: 'Faisalabad', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 73.9 }, { degree: 'BS Mathematics', lastYearClosingMerit: 72.4 }, { degree: 'BS Physics', lastYearClosingMerit: 71.3 }] },
+      { name: 'University of Faisalabad', city: 'Faisalabad', merits: [{ degree: 'MBBS', lastYearClosingMerit: 89.7 }, { degree: 'Doctor of Pharmacy', lastYearClosingMerit: 82.9 }, { degree: 'BS Computer Science', lastYearClosingMerit: 70.8 }] },
+      { name: 'Fatima Jinnah Women University', city: 'Rawalpindi', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 74.1 }, { degree: 'BS Psychology', lastYearClosingMerit: 72.2 }, { degree: 'BBA', lastYearClosingMerit: 70.4 }] },
+      { name: 'Pir Mehr Ali Shah Arid Agriculture University', city: 'Rawalpindi', merits: [{ degree: 'BS Agriculture', lastYearClosingMerit: 76.8 }, { degree: 'BS Environmental Science', lastYearClosingMerit: 73.6 }, { degree: 'BS Computer Science', lastYearClosingMerit: 72.5 }] },
+      { name: 'University of Sindh', city: 'Jamshoro', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 72.2 }, { degree: 'BS English', lastYearClosingMerit: 69.4 }, { degree: 'BBA', lastYearClosingMerit: 68.9 }] },
+      { name: 'Mehran University of Engineering and Technology', city: 'Jamshoro', merits: [{ degree: 'BE Software Engineering', lastYearClosingMerit: 82.3 }, { degree: 'BE Civil Engineering', lastYearClosingMerit: 80.4 }, { degree: 'BE Electrical Engineering', lastYearClosingMerit: 79.6 }] },
+      { name: 'University of Balochistan', city: 'Quetta', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 67.8 }, { degree: 'BS Management Sciences', lastYearClosingMerit: 65.2 }, { degree: 'BS Physics', lastYearClosingMerit: 64.3 }] },
+      { name: 'Balochistan University of Information Technology, Engineering and Management Sciences', city: 'Quetta', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 72.6 }, { degree: 'BSc Electrical Engineering', lastYearClosingMerit: 70.3 }, { degree: 'BBA', lastYearClosingMerit: 68.9 }] },
+      { name: 'Sukkur IBA University', city: 'Sukkur', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 80.2 }, { degree: 'BBA', lastYearClosingMerit: 78.4 }, { degree: 'BS Accounting and Finance', lastYearClosingMerit: 77.1 }] },
+      { name: 'Ghulam Ishaq Khan Institute of Engineering Sciences and Technology', city: 'Swabi', merits: [{ degree: 'BS Computer Engineering', lastYearClosingMerit: 88.9 }, { degree: 'BS Mechanical Engineering', lastYearClosingMerit: 87.1 }, { degree: 'BS Electrical Engineering', lastYearClosingMerit: 86.4 }] },
+      { name: 'COMSATS University Abbottabad Campus', city: 'Abbottabad', merits: [{ degree: 'BS Computer Science', lastYearClosingMerit: 78.1 }, { degree: 'BS Software Engineering', lastYearClosingMerit: 76.8 }, { degree: 'BS Civil Engineering', lastYearClosingMerit: 74.9 }] },
+    ];
+
+    for (const item of universitySeed) {
+      await ensureUniversityWithMerits(universityRepo, universityMeritRepo, item);
     }
 
     // Past papers and exam categories

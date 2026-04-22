@@ -1,29 +1,13 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class SeedDepartments1680000000003 implements MigrationInterface {
-  name = 'SeedDepartments1680000000003';
+export class AddDepartmentsSchema1680000000003 implements MigrationInterface {
+  name = 'AddDepartmentsSchema1680000000003';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-            INSERT INTO "departments" (name) VALUES
-            ('IT'),
-            ('HR'),
-            ('Finance'),
-            ('Marketing'),
-            ('Sales')
-            ON CONFLICT (name) DO NOTHING
-        `);
+    await queryRunner.query(`SELECT 1`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-            DELETE FROM "departments" WHERE name IN (
-                'IT',
-                'HR',
-                'Finance',
-                'Marketing',
-                'Sales'
-            )
-        `);
+    await queryRunner.query(`SELECT 1`);
   }
 }

@@ -1,31 +1,13 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class SeedLocations1680000000002 implements MigrationInterface {
-  name = 'SeedLocations1680000000002';
+export class AddLocationsSchema1680000000002 implements MigrationInterface {
+  name = 'AddLocationsSchema1680000000002';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-            INSERT INTO "locations" (name) VALUES
-            ('Lahore'),
-            ('Islamabad'),
-            ('Karachi'),
-            ('Rawalpindi'),
-            ('Faisalabad'),
-            ('Sargodha')
-            ON CONFLICT (name) DO NOTHING
-        `);
+    await queryRunner.query(`SELECT 1`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-            DELETE FROM "locations" WHERE name IN (
-                'Lahore',
-                'Islamabad',
-                'Karachi',
-                'Rawalpindi',
-                'Faisalabad',
-                'Sargodha'
-            )
-        `);
+    await queryRunner.query(`SELECT 1`);
   }
 }
