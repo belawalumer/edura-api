@@ -402,13 +402,14 @@ export class TestsService {
   ) {
     const { page = 1, limit = 10, search } = query;
 
-    const getAttemptMap = async (
+    const getLatestAttemptMap = async (
       testIds: number[]
     ): Promise<
       Map<
         number,
         {
           id: number;
+          status: TestStatus;
           remaining_duration: number | null;
           attemptedCount: number;
           coins_earned: number;
@@ -419,15 +420,16 @@ export class TestsService {
       const attempts = await this.testAttemptRepo.find({
         where: {
           user_id: userId,
-          status: TestStatus.IN_PROGRESS,
           test: { id: In(testIds) },
         },
+        order: { id: 'DESC' },
         relations: ['answers', 'test'],
       });
       const map = new Map<
         number,
         {
           id: number;
+          status: TestStatus;
           remaining_duration: number | null;
           attemptedCount: number;
           coins_earned: number;
@@ -435,21 +437,26 @@ export class TestsService {
       >();
       for (const a of attempts) {
         const testId = a.test?.id;
-        if (testId != null) {
-          const attemptedCount =
-            a.answers?.filter((ua) => ua.selected_option_id != null).length ??
-            0;
-          map.set(testId, {
-            id: a.id,
-            remaining_duration: a.remaining_duration ?? null,
-            attemptedCount,
-            coins_earned: Number(a.coins_earned ?? 0),
-          });
+        if (testId == null) continue;
+        const existing = map.get(testId);
+        if (existing?.status === TestStatus.IN_PROGRESS) {
+          continue;
         }
+        if (existing?.status === TestStatus.COMPLETED && a.status === TestStatus.COMPLETED) {
+          continue;
+        }
+        const attemptedCount =
+          a.answers?.filter((ua) => ua.selected_option_id != null).length ?? 0;
+        map.set(testId, {
+          id: a.id,
+          status: a.status,
+          remaining_duration: a.remaining_duration ?? null,
+          attemptedCount,
+          coins_earned: Number(a.coins_earned ?? 0),
+        });
       }
       return map;
     };
-
     // SUBJECT TESTS
     if (filters.type === CategoryType.SUBJECT_TEST) {
       const qb = this.testRepo
@@ -476,7 +483,7 @@ export class TestsService {
 
       const [rawItems, total] = await qb.getManyAndCount();
       const testIds = rawItems.map((t) => t.id);
-      const attemptMap = await getAttemptMap(testIds);
+      const attemptMap = await getLatestAttemptMap(testIds);
 
       const items = rawItems.map((test) => {
         const attempt = attemptMap.get(test.id);
@@ -489,7 +496,12 @@ export class TestsService {
           grade: test.grade?.name ?? null,
         };
         if (userId != null) {
-          const status = attempt ? 'in_progress' : 'active';
+          const status =
+            attempt?.status === TestStatus.IN_PROGRESS
+              ? 'in_progress'
+              : attempt?.status === TestStatus.COMPLETED
+                ? 'completed'
+                : 'active';
           if (attempt) {
             return {
               ...base,
@@ -562,7 +574,7 @@ export class TestsService {
           ? t.divisions.map((d) => d.id)
           : [t.id]
       );
-      const attemptMap = await getAttemptMap(testIds);
+      const attemptMap = await getLatestAttemptMap(testIds);
 
       const items = rawItems.map((test) => {
         const hasDivisions = test.divisions && test.divisions.length > 0;
@@ -582,16 +594,26 @@ export class TestsService {
             let attempted_questions = 0;
             let coins_earned = 0;
             let remaining_duration_sum_sec = 0;
+            let hasInProgressDivision = false;
+            let allCompleted = true;
+
             for (const div of divisions) {
               const divAttempt = attemptMap.get(div.id);
               if (divAttempt) {
                 attempted_questions += divAttempt.attemptedCount;
                 coins_earned += Number(divAttempt.coins_earned ?? 0);
+                if (divAttempt.status === TestStatus.IN_PROGRESS) {
+                  hasInProgressDivision = true;
+                }
+                if (divAttempt.status !== TestStatus.COMPLETED) {
+                  allCompleted = false;
+                }
                 const divRemainingSec =
                   divAttempt.remaining_duration ??
                   (div.total_duration != null ? div.total_duration * 60 : 0);
                 remaining_duration_sum_sec += divRemainingSec;
               } else {
+                allCompleted = false;
                 remaining_duration_sum_sec += (div.total_duration ?? 0) * 60;
               }
             }
@@ -603,9 +625,11 @@ export class TestsService {
               (sum, d) => sum + (d.total_questions ?? 0),
               0
             );
-            const status = divisions.some((d) => attemptMap.has(d.id))
+            const status = hasInProgressDivision
               ? 'in_progress'
-              : 'active';
+              : allCompleted
+                ? 'completed'
+                : 'active';
             return {
               ...base,
               total_questions,
@@ -617,7 +641,12 @@ export class TestsService {
           }
 
           const attempt = attemptMap.get(test.id);
-          const status = attempt ? 'in_progress' : 'active';
+          const status =
+            attempt?.status === TestStatus.IN_PROGRESS
+              ? 'in_progress'
+              : attempt?.status === TestStatus.COMPLETED
+                ? 'completed'
+                : 'active';
           if (attempt) {
             return {
               ...base,
@@ -667,6 +696,7 @@ export class TestsService {
       number,
       {
         id: number;
+        status: TestStatus;
         remaining_duration: number | null;
         attemptedCount: number;
         coins_earned: number;
@@ -677,19 +707,30 @@ export class TestsService {
       const attempts = await this.testAttemptRepo.find({
         where: {
           user_id: userId,
-          status: TestStatus.IN_PROGRESS,
           test: { id: In(testIds) },
         },
+        order: { id: 'DESC' },
         relations: ['answers', 'test'],
       });
       for (const a of attempts) {
         const tid = a.test?.id;
         if (tid != null) {
+          const existing = attemptMap.get(tid);
+          if (existing?.status === TestStatus.IN_PROGRESS) {
+            continue;
+          }
+          if (
+            existing?.status === TestStatus.COMPLETED &&
+            a.status === TestStatus.COMPLETED
+          ) {
+            continue;
+          }
           const attemptedCount =
             a.answers?.filter((ua) => ua.selected_option_id != null).length ??
             0;
           attemptMap.set(tid, {
             id: a.id,
+            status: a.status,
             remaining_duration: a.remaining_duration ?? null,
             attemptedCount,
             coins_earned: Number(a.coins_earned ?? 0),
@@ -707,7 +748,13 @@ export class TestsService {
 
     if (userId != null) {
       const attempt = attemptMap.get(test.id);
-      testDetails.status = attempt ? 'in_progress' : 'active';
+      testDetails.status = (
+        attempt?.status === TestStatus.IN_PROGRESS
+          ? 'in_progress'
+          : attempt?.status === TestStatus.COMPLETED
+            ? 'completed'
+            : 'active'
+      ) as TestDetailsBasic['status'];
       if (attempt) {
         testDetails.remaining_duration = attempt.remaining_duration;
         testDetails.attempted_questions = attempt.attemptedCount;
@@ -724,7 +771,13 @@ export class TestsService {
           total_duration: division.total_duration,
         };
         if (userId != null) {
-          const status = divAttempt ? 'in_progress' : 'active';
+          const status = (
+            divAttempt?.status === TestStatus.IN_PROGRESS
+              ? 'in_progress'
+              : divAttempt?.status === TestStatus.COMPLETED
+                ? 'completed'
+                : 'active'
+          ) as TestDetailsBasic['status'];
           if (divAttempt) {
             return {
               ...base,
@@ -827,8 +880,20 @@ export class TestsService {
     if (!questions.length)
       throw new BadRequestException('No questions found for this test');
 
-    const orderedQuestions =
-      attempt_count === 1 ? questions : this.shuffleArray(questions);
+    let orderedQuestions = attempt_count === 1 ? questions : this.shuffleArray(questions);
+
+    // For restart attempts, prioritize previously unanswered questions.
+    if (lastAttempt) {
+      const lastAttemptAnswers = await this.userAnswerRepo.find({
+        where: { testAttempt: { id: lastAttempt.id } },
+        relations: ['question'],
+      });
+      const answeredIds = new Set(lastAttemptAnswers.map((a) => a.question.id));
+      const unansweredQuestions = questions.filter((q) => !answeredIds.has(q.id));
+      if (unansweredQuestions.length > 0) {
+        orderedQuestions = this.shuffleArray(unansweredQuestions);
+      }
+    }
 
     // Create new attempt
     const attempt = this.testAttemptRepo.create({
@@ -1087,6 +1152,16 @@ export class TestsService {
     attempt.coins_earned = coins_earned;
 
     await this.testAttemptRepo.save(attempt);
+
+    await this.testAttemptRepo
+      .createQueryBuilder()
+      .delete()
+      .from(TestAttempt)
+      .where('user_id = :userId', { userId: authUserId })
+      .andWhere('test_id = :testId', { testId: attempt.test.id })
+      .andWhere('status = :status', { status: TestStatus.COMPLETED })
+      .andWhere('id <> :currentAttemptId', { currentAttemptId: attempt.id })
+      .execute();
 
     const user = await this.userRepo.findOne({
       where: { id: authUserId },

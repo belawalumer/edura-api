@@ -28,7 +28,7 @@ export interface BasicTestDivision {
   title: string;
   total_questions: number;
   total_duration: number;
-  status?: 'active' | 'in_progress';
+  status?: 'active' | 'in_progress' | 'completed';
   remaining_duration?: number | null;
   attempted_questions?: number;
   coins_earned?: number;
@@ -40,7 +40,7 @@ export interface TestDetailsBasic {
   total_questions: number;
   total_duration: number;
   divisions?: BasicTestDivision[];
-  status?: 'active' | 'in_progress';
+  status?: 'active' | 'in_progress' | 'completed';
   remaining_duration?: number | null;
   attempted_questions?: number;
 }
