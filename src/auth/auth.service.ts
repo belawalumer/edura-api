@@ -94,13 +94,19 @@ export class AuthService {
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) throw new BadRequestException('Invalid credentials');
+    let refreshToken = user.refreshToken;
+    if (!refreshToken) {
+      refreshToken = generateRefreshToken();
+      user.refreshToken = refreshToken;
+      await this.userRepo.save(user);
+    }
 
     const accessToken = generateToken(user);
 
     return {
       message: 'Login successful',
       accessToken,
-      refreshToken: user.refreshToken,
+      refreshToken: refreshToken,
       user: {
         id: user.id,
         phone: user.phone,
