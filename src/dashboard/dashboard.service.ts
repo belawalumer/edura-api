@@ -9,6 +9,7 @@ import { TestAttempt } from 'src/tests/entities/test_attempt.entity';
 import { TestStatus } from 'src/common/enums';
 import { Job } from 'src/jobs/entities/job.entity';
 import { TestimonialsService } from 'src/testimonials/testimonials.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class DashboardService {
@@ -20,7 +21,8 @@ export class DashboardService {
     @InjectRepository(Job) private readonly jobRepo: Repository<Job>,
     @InjectRepository(BannersAnnouncement)
     private readonly announcementRepo: Repository<BannersAnnouncement>,
-    private readonly testimonialsService: TestimonialsService
+    private readonly testimonialsService: TestimonialsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async getAdminDashboard() {
@@ -200,10 +202,20 @@ export class DashboardService {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
+    const readStatus = await this.notificationsService.getReadStatus(
+      authUserId,
+      items.map((i) => i.id),
+    );
+
+    const itemsWithReadStatus = items.map((item) => ({
+      ...item,
+      isRead: readStatus.has(item.id),
+    }));
+
     return {
       message: 'Notifications retrieved successfully',
       data: {
-        items,
+        items: itemsWithReadStatus,
       },
     };
   }
