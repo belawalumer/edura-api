@@ -21,6 +21,7 @@ import { LocationsModule } from './locations/locations.module';
 import { ExamCategoryModule } from './exam-category/exam-category.module';
 import { UniversitiesModule } from './universities/universities.module';
 import { CollegesModule } from './colleges/colleges.module';
+import { TestimonialsModule } from './testimonials/testimonials.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { CollegesModule } from './colleges/colleges.module';
     ExamCategoryModule,
     UniversitiesModule,
     CollegesModule,
+    TestimonialsModule,
   ],
 })
 export class AppModule {}

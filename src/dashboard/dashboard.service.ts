@@ -8,6 +8,7 @@ import { User } from 'src/user/entities/user.entity';
 import { TestAttempt } from 'src/tests/entities/test_attempt.entity';
 import { TestStatus } from 'src/common/enums';
 import { Job } from 'src/jobs/entities/job.entity';
+import { TestimonialsService } from 'src/testimonials/testimonials.service';
 
 @Injectable()
 export class DashboardService {
@@ -18,7 +19,8 @@ export class DashboardService {
     private readonly testAttemptRepo: Repository<TestAttempt>,
     @InjectRepository(Job) private readonly jobRepo: Repository<Job>,
     @InjectRepository(BannersAnnouncement)
-    private readonly announcementRepo: Repository<BannersAnnouncement>
+    private readonly announcementRepo: Repository<BannersAnnouncement>,
+    private readonly testimonialsService: TestimonialsService
   ) {}
 
   async getAdminDashboard() {
@@ -88,10 +90,24 @@ export class DashboardService {
       take: 10,
     });
 
+    const testimonials = await this.testimonialsService.findAll();
+
+    const [totalStudents, totalTests, totalJobs] = await Promise.all([
+      this.userRepo.count({ where: { role: UserRole.USER } }),
+      this.testRepo.count(),
+      this.jobRepo.count({ where: { status: Status.ACTIVE } }),
+    ]);
+
     return {
       message: 'Home data retrieved successfully',
       data: {
         announcements,
+        stats: {
+          total_students: totalStudents,
+          total_tests: totalTests,
+          total_universities: 100, // placeholder, can be made dynamic
+          total_jobs: totalJobs,
+        },
         jobs: jobs.map((job) => ({
           id: job.id,
           title: job.title,
@@ -114,6 +130,7 @@ export class DashboardService {
           image: user.image ?? null,
           score: Number(user.total_coins ?? 0),
         })),
+        testimonials: testimonials.slice(0, 6),
       },
     };
   }

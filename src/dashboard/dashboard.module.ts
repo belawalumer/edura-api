@@ -7,10 +7,12 @@ import { Test } from '../tests/entities/test.entity';
 import { BannersAnnouncement } from '../banners_announcements/entities/banners_announcement.entity';
 import { TestAttempt } from 'src/tests/entities/test_attempt.entity';
 import { Job } from 'src/jobs/entities/job.entity';
+import { TestimonialsModule } from 'src/testimonials/testimonials.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Test, BannersAnnouncement, TestAttempt, Job]),
+    TestimonialsModule,
   ],
   controllers: [DashboardController],
   providers: [DashboardService],
