@@ -157,4 +157,22 @@ export class GradesService {
 
     return { message: 'Grade deleted successfully' };
   }
+
+  async getGradesMeta() {
+    const rows = await this.gradeRepo.find({
+      where: { status: Status.ACTIVE },
+      order: { id: 'ASC' },
+    });
+
+    return {
+      message: 'Grades meta retrieved successfully',
+      data: {
+        grades: rows.map((g) => ({
+          id: g.id,
+          label: g.name,
+          value: String(g.id),
+        })),
+      },
+    };
+  }
 }

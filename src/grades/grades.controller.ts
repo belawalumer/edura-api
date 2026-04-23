@@ -20,11 +20,18 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { UserRole } from 'src/common/enums';
 import type { RequestWithUser } from 'src/auth/guard/auth_guard';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
+import { Public } from 'src/auth/decorators/public.decorator';
 
 @UseGuards(AuthGuard)
 @Controller('grades')
 export class GradesController {
   constructor(private readonly gradesService: GradesService) {}
+
+  @Get('meta')
+  @Public()
+  getMeta() {
+    return this.gradesService.getGradesMeta();
+  }
 
   @Post()
   @Roles(UserRole.ADMIN)
