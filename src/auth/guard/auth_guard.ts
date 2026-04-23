@@ -20,7 +20,8 @@ export interface AuthUser {
   id?: number;
   email: string;
   role: string;
-  phone?: string;
+  phone?: string | null;
+  countryCode?: string | null;
   name?: string;
   image?: string;
 }
@@ -82,7 +83,8 @@ export class AuthGuard implements CanActivate {
       user = {
         id: dbUser.id,
         email: dbUser.email,
-        phone: dbUser.phone,
+        phone: dbUser.phone ?? null,
+        countryCode: dbUser.countryCode ?? null,
         role: dbUser.role,
         name: dbUser.name,
         image: dbUser.image ?? undefined,
@@ -123,7 +125,8 @@ export class AuthGuard implements CanActivate {
         user = {
           id: dbUser.id,
           email: dbUser.email,
-          phone: dbUser.phone,
+          phone: dbUser.phone ?? null,
+          countryCode: dbUser.countryCode ?? null,
           role: dbUser.role,
           name: dbUser.name,
           image: dbUser.image ?? undefined,

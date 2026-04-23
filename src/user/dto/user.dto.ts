@@ -11,6 +11,10 @@ export class UpdateAdminDto {
 
   @IsOptional()
   @IsString()
+  countryCode?: string;
+
+  @IsOptional()
+  @IsString()
   image?: string;
 
   @IsOptional()
@@ -30,6 +34,10 @@ export class UpdateUserProfileDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  countryCode?: string;
 
   @IsOptional()
   @IsString()

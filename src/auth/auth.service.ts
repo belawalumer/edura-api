@@ -50,8 +50,8 @@ export class AuthService {
       email,
       password: hashedPassword,
       role: UserRole.USER,
-      // users.phone is non-nullable and unique in current schema.
-      phone: `email-${Date.now()}`,
+      phone: null,
+      countryCode: null,
       refreshToken,
     });
 
@@ -65,7 +65,8 @@ export class AuthService {
       refreshToken: user.refreshToken,
       user: {
         id: user.id,
-        phone: user.phone,
+        phone: user.phone ?? null,
+        countryCode: user.countryCode ?? null,
         role: user.role,
         email: user.email,
         name: user.name,
@@ -109,7 +110,8 @@ export class AuthService {
       refreshToken: refreshToken,
       user: {
         id: user.id,
-        phone: user.phone,
+        phone: user.phone ?? null,
+        countryCode: user.countryCode ?? null,
         role: user.role,
         email: user.email,
         name: user.name,
@@ -153,7 +155,8 @@ export class AuthService {
       user = this.userRepo.create({
         email,
         role: UserRole.USER,
-        phone: data.user.phone ?? `${provider}-${Date.now()}`,
+        phone: data.user.phone ?? null,
+        countryCode: null,
         name: String(data.user.user_metadata?.full_name || email),
         image: data.user.user_metadata?.avatar_url
           ? String(data.user.user_metadata.avatar_url)
@@ -174,7 +177,8 @@ export class AuthService {
       refreshToken: user.refreshToken,
       user: {
         id: user.id,
-        phone: user.phone,
+        phone: user.phone ?? null,
+        countryCode: user.countryCode ?? null,
         role: user.role,
         email: user.email,
         name: user.name,

@@ -30,7 +30,8 @@ export class UserService {
       data: {
         id: user.id,
         name: user.name,
-        phone: user.phone,
+        phone: user.phone ?? null,
+        countryCode: user.countryCode ?? null,
         email: user.email,
         image: user.image ?? null,
         role: user.role,
@@ -64,6 +65,7 @@ export class UserService {
 
     user.name = dto.name ?? user.name;
     user.phone = dto.phone ?? user.phone;
+    user.countryCode = dto.countryCode ?? user.countryCode;
 
     if (imageUrl) {
       user.image = imageUrl;
@@ -76,7 +78,8 @@ export class UserService {
       data: {
         id: user.id,
         name: user.name,
-        phone: user.phone,
+        phone: user.phone ?? null,
+        countryCode: user.countryCode ?? null,
         image: user.image,
       },
     };
@@ -87,11 +90,16 @@ export class UserService {
     dto: Partial<UpdateAdminDto>,
     imageUrl?: string
   ) {
+    console.log("dto", dto);
+    console.log("imageUrl", imageUrl);
     const user = await this.userRepo.findOne({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
     user.name = dto.name ?? user.name;
+  
     user.phone = dto.phone ?? user.phone;
+    user.countryCode = dto.countryCode ?? user.countryCode;
+
     user.email = dto.email ?? user.email;
     user.grade = dto.grade ?? user.grade;
 
@@ -106,7 +114,8 @@ export class UserService {
       data: {
         id: user.id,
         name: user.name,
-        phone: user.phone,
+        phone: user.phone ?? null,
+        countryCode: user.countryCode ?? null,
         email: user.email,
         image: user.image ?? null,
         role: user.role,

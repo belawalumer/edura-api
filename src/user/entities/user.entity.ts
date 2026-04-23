@@ -15,8 +15,11 @@ export class User {
   @Column()
   name: string;
 
-  @Column({ nullable: false, unique: true })
-  phone: string;
+  @Column({ type: 'varchar', nullable: true, unique: true })
+  phone?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  countryCode?: string | null;
 
   @Column({ unique: true })
   email: string;
