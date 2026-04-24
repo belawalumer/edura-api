@@ -212,10 +212,16 @@ export class DashboardService {
       isRead: readStatus.has(item.id),
     }));
 
+    const unread_count = itemsWithReadStatus.filter((i) => !i.isRead).length;
+
     return {
       message: 'Notifications retrieved successfully',
       data: {
         items: itemsWithReadStatus,
+        meta: {
+          total: itemsWithReadStatus.length,
+          unread_count,
+        },
       },
     };
   }
