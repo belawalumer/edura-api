@@ -69,16 +69,21 @@ export class UserController {
   getLeaderboard(
     @Query('timeframe') timeframe?: 'all_time' | 'weekly' | 'monthly',
     @Query('limit') limit?: string,
+    @Query('onlyMe') onlyMe?: string,
     @Req() req?: RequestWithUser
   ) {
     const parsedLimit =
       typeof limit === 'string' && limit.trim() !== ''
         ? Number(limit)
         : undefined;
+    const parsedOnlyMe =
+      typeof onlyMe === 'string' &&
+      ['1', 'true', 'yes'].includes(onlyMe.toLowerCase());
     return this.userService.getLeaderboard(
       timeframe ?? 'all_time',
       parsedLimit ?? 20,
-      req?.user?.id
+      req?.user?.id,
+      parsedOnlyMe
     );
   }
 

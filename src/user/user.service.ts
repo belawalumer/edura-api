@@ -90,8 +90,6 @@ export class UserService {
     dto: Partial<UpdateAdminDto>,
     imageUrl?: string
   ) {
-    console.log("dto", dto);
-    console.log("imageUrl", imageUrl);
     const user = await this.userRepo.findOne({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -128,19 +126,22 @@ export class UserService {
   async getLeaderboard(
     timeframe: 'all_time' | 'weekly' | 'monthly' = 'all_time',
     limit = 20,
-    authUserId?: number
+    authUserId?: number,
+    onlyMe = false
   ) {
     const safeLimit = Math.min(Math.max(limit, 1), 100);
 
     if (timeframe === 'all_time') {
-      const topUsers = await this.userRepo
-        .createQueryBuilder('user')
-        .where('user.role = :role', { role: UserRole.USER })
-        .andWhere('user.isSuspended = false')
-        .orderBy('user.total_coins', 'DESC')
-        .addOrderBy('user.id', 'ASC')
-        .take(safeLimit)
-        .getMany();
+      const topUsers = onlyMe
+        ? []
+        : await this.userRepo
+            .createQueryBuilder('user')
+            .where('user.role = :role', { role: UserRole.USER })
+            .andWhere('user.isSuspended = false')
+            .orderBy('user.total_coins', 'DESC')
+            .addOrderBy('user.id', 'ASC')
+            .take(safeLimit)
+            .getMany();
 
       const ranked = topUsers.map((u, index) => ({
         rank: index + 1,
@@ -159,7 +160,9 @@ export class UserService {
       } | null = null;
 
       if (authUserId) {
-        const inTop = ranked.find((item) => item.user_id === authUserId);
+        const inTop = onlyMe
+          ? undefined
+          : ranked.find((item) => item.user_id === authUserId);
         if (inTop) {
           currentUser = inTop;
         } else {
@@ -214,30 +217,31 @@ export class UserService {
       fromDate.setDate(now.getDate() - 30);
     }
 
-    const leaderboardQb = this.testAttemptRepo
-      .createQueryBuilder('attempt')
-      .innerJoin(User, 'user', 'user.id = attempt.user_id')
-      .select('attempt.user_id', 'user_id')
-      .addSelect('user.name', 'name')
-      .addSelect('user.image', 'image')
-      .addSelect('COALESCE(SUM(attempt.coins_earned), 0)', 'score')
-      .where('attempt.status = :status', { status: TestStatus.COMPLETED })
-      .andWhere('attempt.created_at >= :fromDate', { fromDate })
-      .andWhere('user.role = :role', { role: UserRole.USER })
-      .andWhere('user.isSuspended = false')
-      .groupBy('attempt.user_id')
-      .addGroupBy('user.name')
-      .addGroupBy('user.image')
-      .orderBy('score', 'DESC')
-      .addOrderBy('attempt.user_id', 'ASC')
-      .take(safeLimit);
-
-    const raw = await leaderboardQb.getRawMany<{
-      user_id: string;
-      name: string;
-      image: string | null;
-      score: string;
-    }>();
+    const raw = onlyMe
+      ? []
+      : await this.testAttemptRepo
+          .createQueryBuilder('attempt')
+          .innerJoin(User, 'user', 'user.id = attempt.user_id')
+          .select('attempt.user_id', 'user_id')
+          .addSelect('user.name', 'name')
+          .addSelect('user.image', 'image')
+          .addSelect('COALESCE(SUM(attempt.coins_earned), 0)', 'score')
+          .where('attempt.status = :status', { status: TestStatus.COMPLETED })
+          .andWhere('attempt.created_at >= :fromDate', { fromDate })
+          .andWhere('user.role = :role', { role: UserRole.USER })
+          .andWhere('user.isSuspended = false')
+          .groupBy('attempt.user_id')
+          .addGroupBy('user.name')
+          .addGroupBy('user.image')
+          .orderBy('score', 'DESC')
+          .addOrderBy('attempt.user_id', 'ASC')
+          .take(safeLimit)
+          .getRawMany<{
+            user_id: string;
+            name: string;
+            image: string | null;
+            score: string;
+          }>();
 
     const ranked = raw.map((row, index) => ({
       rank: index + 1,
@@ -256,7 +260,9 @@ export class UserService {
     } | null = null;
 
     if (authUserId) {
-      const inTop = ranked.find((item) => item.user_id === authUserId);
+      const inTop = onlyMe
+        ? undefined
+        : ranked.find((item) => item.user_id === authUserId);
       if (inTop) {
         currentUser = inTop;
       } else {
@@ -319,6 +325,14 @@ export class UserService {
             image: meAgg.image ?? null,
             score,
           };
+        } else {
+          const meWindow = await this.getLeaderboardSelfWithTimeframe(
+            authUserId,
+            fromDate
+          );
+          if (meWindow) {
+            currentUser = meWindow;
+          }
         }
       }
     }
@@ -330,6 +344,66 @@ export class UserService {
         items: ranked,
         currentUser,
       },
+    };
+  }
+
+  private async getLeaderboardSelfWithTimeframe(
+    userId: number,
+    fromDate: Date
+  ): Promise<{
+    rank: number;
+    user_id: number;
+    name: string;
+    image: string | null;
+    score: number;
+  } | null> {
+    const rows = (await this.userRepo.query(
+      `
+      WITH per_user AS (
+        SELECT u.id AS user_id,
+               u.name AS name,
+               u.image AS image,
+               COALESCE(SUM(ta."coins_earned"), 0)::double precision AS score
+        FROM users u
+        LEFT JOIN test_attempts ta
+          ON ta.user_id = u.id
+         AND ta.status = $1::test_status_enum
+         AND ta.created_at >= $2
+        WHERE u.role = $3::user_role_enum
+          AND u."isSuspended" = false
+        GROUP BY u.id, u.name, u.image
+      )
+      SELECT p1.user_id AS user_id,
+             p1.name AS name,
+             p1.image AS image,
+             p1.score AS score,
+             (
+               (SELECT COUNT(*)::int FROM per_user p2
+                WHERE p2.score > p1.score
+                   OR (p2.score = p1.score AND p2.user_id < p1.user_id)
+               ) + 1
+             ) AS rank
+      FROM per_user p1
+      WHERE p1.user_id = $4
+      `,
+      [TestStatus.COMPLETED, fromDate, UserRole.USER, userId]
+    )) as Array<{
+      user_id: string | number;
+      name: string;
+      image: string | null;
+      score: string | number;
+      rank: string | number;
+    }>;
+
+    const row = rows[0];
+    if (!row) return null;
+
+    return {
+      rank: Number(row.rank),
+      user_id: Number(row.user_id),
+      name: row.name,
+      image: row.image ?? null,
+      score: Number(row.score),
     };
   }
 
