@@ -32,6 +32,7 @@ import { UniversityMerit } from './src/universities/entities/university-merit.en
 import { College } from './src/colleges/entities/college.entity';
 import { CollegeMerit } from './src/colleges/entities/college-merit.entity';
 import { BannersAnnouncement } from './src/banners_announcements/entities/banners_announcement.entity';
+import { Testimonial } from './src/testimonials/entities/testimonial.entity';
 
 type QuestionSeed = {
   title: string;
@@ -64,6 +65,30 @@ async function ensureFaq(
 
   if (existing) return existing;
   return await repo.save(repo.create({ title, description, visibility }));
+}
+
+async function ensureTestimonial(
+  repo: Repository<Testimonial>,
+  payload: {
+    name: string;
+    role: string;
+    text: string;
+    avatar?: string | null;
+    rating?: number;
+  }
+) {
+  const existing = await repo.findOne({ where: { name: payload.name } });
+  if (existing) return existing;
+  return await repo.save(
+    repo.create({
+      name: payload.name,
+      role: payload.role,
+      text: payload.text,
+      avatar: payload.avatar ?? undefined,
+      rating: payload.rating ?? 5,
+      isActive: true,
+    })
+  );
 }
 
 async function ensureAnnouncement(
@@ -429,6 +454,7 @@ async function seed() {
     const collegeRepo = AppDataSource.getRepository(College);
     const collegeMeritRepo = AppDataSource.getRepository(CollegeMerit);
     const announcementRepo = AppDataSource.getRepository(BannersAnnouncement);
+    const testimonialRepo = AppDataSource.getRepository(Testimonial);
 
     // FAQs
     await ensureFaq(
@@ -480,6 +506,61 @@ async function seed() {
       ctaLink: 'https://propakistani.pk/2026/04/16/pmdc-introduces-mandatory-requirement-for-mdcat-2026/',
       image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b',
     });
+    // Testimonials (dashboard/home); idempotent by name — complements migration seed rows.
+    const testimonialSeeds = [
+      {
+        name: 'Ahmed Khan',
+        role: 'Medical Student',
+        text: 'Edura helped me crack my medical entrance exam. The practice tests were incredibly similar to the real exam.',
+        avatar:
+          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop',
+        rating: 5,
+      },
+      {
+        name: 'Fatima Ali',
+        role: 'Engineering Aspirant',
+        text: 'The roadmap feature guided me through every step of my university application. Highly recommended!',
+        avatar:
+          'https://images.unsplash.com/photo-1494790108378-be9c29b29330?w=150&h=150&fit=crop',
+        rating: 5,
+      },
+      {
+        name: 'Bilal Hassan',
+        role: 'Job Seeker',
+        text: 'Found my dream job through Edura job board. The application process was seamless.',
+        avatar:
+          'https://images.unsplash.com/photo-1500648767791-62f6e5a8f9e5?w=150&h=150&fit=crop',
+        rating: 5,
+      },
+      {
+        name: 'Ayesha Siddiqui',
+        role: 'CS Student',
+        text: 'The past papers section saved my semester. Amazing resource for computer science students!',
+        avatar:
+          'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop',
+        rating: 5,
+      },
+      {
+        name: 'Hassan Raza',
+        role: 'Business Administration',
+        text: 'Entry test preparation has never been this organized. Edura made my dream of studying abroad come true.',
+        avatar:
+          'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop',
+        rating: 5,
+      },
+      {
+        name: 'Zara Khan',
+        role: 'Law Student',
+        text: 'The analytics helped me identify weak areas and improve. Now I am studying at my dream law school!',
+        avatar:
+          'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop',
+        rating: 5,
+      },
+    ];
+    for (const t of testimonialSeeds) {
+      await ensureTestimonial(testimonialRepo, t);
+    }
+
     await ensureAnnouncement(announcementRepo, {
       title: 'UET ECAT Fall 2026 phase-2 registration details',
       description:
