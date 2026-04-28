@@ -192,8 +192,17 @@ async function ensureSubjectTest(
     chapter?: Chapter;
     total_duration: number;
     questions: QuestionSeed[];
+    correct_marks?: number;
+    negative_marks?: number;
+    skipped_marks?: number;
   }
 ) {
+  const marking = {
+    correct_marks: payload.correct_marks ?? 1,
+    negative_marks: payload.negative_marks ?? 0,
+    skipped_marks: payload.skipped_marks ?? 0,
+  };
+
   let test = await testRepo.findOne({
     where: { title: payload.title, parentTest: IsNull() },
     relations: ['parentTest'],
@@ -210,8 +219,14 @@ async function ensureSubjectTest(
         grade: payload.grade,
         subject: payload.subject,
         chapter: payload.chapter,
+        ...marking,
       })
     );
+  } else {
+    test.correct_marks = marking.correct_marks;
+    test.negative_marks = marking.negative_marks;
+    test.skipped_marks = marking.skipped_marks;
+    await testRepo.save(test);
   }
 
   await ensureQuestions(questionRepo, optionRepo, test, payload.questions);
@@ -226,8 +241,17 @@ async function ensureEntryTestWithoutDivisions(
     category: Category;
     total_duration: number;
     questions: QuestionSeed[];
+    correct_marks?: number;
+    negative_marks?: number;
+    skipped_marks?: number;
   }
 ) {
+  const marking = {
+    correct_marks: payload.correct_marks ?? 1,
+    negative_marks: payload.negative_marks ?? 0,
+    skipped_marks: payload.skipped_marks ?? 0,
+  };
+
   let test = await testRepo.findOne({
     where: { title: payload.title, parentTest: IsNull() },
     relations: ['parentTest'],
@@ -241,8 +265,14 @@ async function ensureEntryTestWithoutDivisions(
         total_questions: payload.questions.length,
         total_duration: payload.total_duration,
         category: payload.category,
+        ...marking,
       })
     );
+  } else {
+    test.correct_marks = marking.correct_marks;
+    test.negative_marks = marking.negative_marks;
+    test.skipped_marks = marking.skipped_marks;
+    await testRepo.save(test);
   }
 
   await ensureQuestions(questionRepo, optionRepo, test, payload.questions);
@@ -261,9 +291,22 @@ async function ensureEntryTestWithDivisions(
       subject: Subject;
       total_duration: number;
       questions: QuestionSeed[];
+      /** Optional; defaults to parent payload marking, then API defaults. */
+      correct_marks?: number;
+      negative_marks?: number;
+      skipped_marks?: number;
     }[];
+    correct_marks?: number;
+    negative_marks?: number;
+    skipped_marks?: number;
   }
 ) {
+  const marking = {
+    correct_marks: payload.correct_marks ?? 1,
+    negative_marks: payload.negative_marks ?? 0,
+    skipped_marks: payload.skipped_marks ?? 0,
+  };
+
   let parent = await testRepo.findOne({
     where: { title: payload.title, parentTest: IsNull() },
     relations: ['parentTest'],
@@ -280,11 +323,23 @@ async function ensureEntryTestWithDivisions(
         ),
         total_duration: payload.total_duration,
         category: payload.category,
+        ...marking,
       })
     );
+  } else {
+    parent.correct_marks = marking.correct_marks;
+    parent.negative_marks = marking.negative_marks;
+    parent.skipped_marks = marking.skipped_marks;
+    await testRepo.save(parent);
   }
 
   for (const div of payload.divisions) {
+    const divMarking = {
+      correct_marks: div.correct_marks ?? marking.correct_marks,
+      negative_marks: div.negative_marks ?? marking.negative_marks,
+      skipped_marks: div.skipped_marks ?? marking.skipped_marks,
+    };
+
     let division = await testRepo.findOne({
       where: { title: div.title, parentTest: { id: parent.id } },
       relations: ['parentTest'],
@@ -300,8 +355,14 @@ async function ensureEntryTestWithDivisions(
           category: payload.category,
           subject: div.subject,
           parentTest: parent,
+          ...divMarking,
         })
       );
+    } else {
+      division.correct_marks = divMarking.correct_marks;
+      division.negative_marks = divMarking.negative_marks;
+      division.skipped_marks = divMarking.skipped_marks;
+      await testRepo.save(division);
     }
 
     await ensureQuestions(questionRepo, optionRepo, division, div.questions);
@@ -614,6 +675,9 @@ async function seed() {
       subject: math,
       chapter: trigChapter,
       total_duration: 30,
+      correct_marks: 4,
+      negative_marks: -1,
+      skipped_marks: 0,
       questions: [
         {
           title: 'If sin(theta)=3/5 and theta is acute, cos(theta) equals?',
@@ -652,6 +716,9 @@ async function seed() {
       subject: physics,
       chapter: electroChapter,
       total_duration: 30,
+      correct_marks: 2,
+      negative_marks: -0.5,
+      skipped_marks: -0.25,
       questions: [
         {
           title: 'SI unit of electric field intensity is:',
@@ -689,6 +756,9 @@ async function seed() {
       grade: grade12,
       subject: chemistry,
       total_duration: 30,
+      correct_marks: 1,
+      negative_marks: -0.25,
+      skipped_marks: 0,
       questions: [
         {
           title: 'Functional group of alcohol is:',
@@ -726,6 +796,9 @@ async function seed() {
       grade: grade12,
       subject: biology,
       total_duration: 30,
+      correct_marks: 5,
+      negative_marks: -1.5,
+      skipped_marks: -0.5,
       questions: [
         {
           title: 'The functional unit of kidney is:',
@@ -762,6 +835,9 @@ async function seed() {
       title: 'MDCAT Biology & Chemistry Mini Mock',
       category: entryTestsCategory,
       total_duration: 40,
+      correct_marks: 1,
+      negative_marks: -0.33,
+      skipped_marks: 0,
       questions: [
         {
           title: 'The powerhouse of the cell is:',
@@ -797,11 +873,17 @@ async function seed() {
       title: 'ECAT Engineering Prep Mock (With Divisions)',
       category: entryTestsCategory,
       total_duration: 90,
+      correct_marks: 3,
+      negative_marks: -0.75,
+      skipped_marks: -0.125,
       divisions: [
         {
           title: 'ECAT Mathematics Division',
           subject: math,
           total_duration: 45,
+          correct_marks: 4,
+          negative_marks: -1,
+          skipped_marks: 0,
           questions: [
             {
               title: 'Derivative of x^2 is:',
@@ -836,6 +918,9 @@ async function seed() {
           title: 'ECAT Physics Division',
           subject: physics,
           total_duration: 45,
+          correct_marks: 1.5,
+          negative_marks: -0.4,
+          skipped_marks: 0.1,
           questions: [
             {
               title: 'SI unit of force is:',
@@ -873,6 +958,9 @@ async function seed() {
       title: 'NUST NET Basic Quantitative & Analytical Mock',
       category: entryTestsCategory,
       total_duration: 35,
+      correct_marks: 2,
+      negative_marks: -0.2,
+      skipped_marks: 0.25,
       questions: [
         {
           title: 'If 3x + 5 = 20, x = ?',

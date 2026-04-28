@@ -26,7 +26,10 @@ import {
   Status,
   TestStatus,
 } from 'src/common/enums';
-import { TestDetailsBasic } from './dto/get-available-test-dto';
+import {
+  BasicTestDivision,
+  TestDetailsBasic,
+} from './dto/get-available-test-dto';
 import { User } from 'src/user/entities/user.entity';
 
 @Injectable()
@@ -48,6 +51,130 @@ export class TestsService {
     private readonly userRepo: Repository<User>
   ) {}
 
+  private getAttemptRemainingDuration(attempt: {
+    status: TestStatus;
+    remaining_duration?: number | null;
+    end_time?: Date | null;
+  }): number | null {
+    if (attempt.status !== TestStatus.IN_PROGRESS) {
+      return attempt.remaining_duration ?? null;
+    }
+    if (!attempt.end_time) {
+      return attempt.remaining_duration ?? null;
+    }
+    return Math.max(
+      0,
+      Math.floor((new Date(attempt.end_time).getTime() - Date.now()) / 1000),
+    );
+  }
+
+  private formatDuration(seconds: number): string {
+    const safeSeconds = Math.max(0, Math.floor(seconds));
+    const minutes = Math.floor(safeSeconds / 60);
+    const remainingSeconds = safeSeconds % 60;
+    return `${minutes}m ${remainingSeconds}s`;
+  }
+
+  private async completeAttemptWithScore(attempt: TestAttempt): Promise<{
+    marks: number;
+    total_correct: number;
+    total_wrong: number;
+    total_skipped: number;
+    answered: number;
+    total_questions: number;
+    coins_earned: number;
+    time_taken: string;
+  }> {
+    const questions =
+      attempt.test?.questions?.length > 0
+        ? attempt.test.questions
+        : await this.questionRepo.find({
+            where: { test: { id: attempt.test.id } },
+          });
+
+    const allAnswers = await this.userAnswerRepo.find({
+      where: { testAttempt: { id: attempt.id } },
+      relations: ['question'],
+    });
+
+    const correctMarks = Number(attempt.test.correct_marks ?? 1);
+    const negativeMarks = Number(attempt.test.negative_marks ?? 0);
+    const skippedMarks = Number(attempt.test.skipped_marks ?? 0);
+    const answersByQuestionId = new Map<number, UserAnswer>();
+
+    for (const answer of allAnswers) {
+      if (answer.question?.id != null) {
+        answersByQuestionId.set(answer.question.id, answer);
+      }
+    }
+
+    let totalCorrect = 0;
+    let totalWrong = 0;
+    let totalSkipped = 0;
+
+    for (const question of questions) {
+      const answer = answersByQuestionId.get(question.id);
+      if (!answer || answer.selected_option_id == null) {
+        totalSkipped++;
+      } else if (answer.isCorrect === true) {
+        totalCorrect++;
+      } else {
+        totalWrong++;
+      }
+    }
+
+    const score =
+      totalCorrect * correctMarks -
+      totalSkipped * skippedMarks -
+      totalWrong * negativeMarks;
+    const marks = Math.max(0, score);
+    const coinsEarned = score;
+    const completedTime = new Date();
+    const totalDurationSeconds = Number(attempt.test.total_duration ?? 0) * 60;
+    const remainingMs = attempt.end_time
+      ? new Date(attempt.end_time).getTime() - completedTime.getTime()
+      : 0;
+    const timeTakenSeconds =
+      remainingMs > 0
+        ? totalDurationSeconds - Math.floor(remainingMs / 1000)
+        : totalDurationSeconds;
+    const timeTaken = this.formatDuration(timeTakenSeconds);
+
+    attempt.status = TestStatus.COMPLETED;
+    attempt.completed_time = completedTime;
+    attempt.marks = marks;
+    attempt.total_correct = totalCorrect;
+    attempt.total_wrong = totalWrong;
+    attempt.total_skipped = totalSkipped;
+    attempt.correct_marks = correctMarks;
+    attempt.negative_marks = negativeMarks;
+    attempt.skipped_marks = skippedMarks;
+    attempt.coins_earned = coinsEarned;
+    attempt.time_taken = timeTaken;
+
+    await this.testAttemptRepo.save(attempt);
+
+    return {
+      marks,
+      total_correct: totalCorrect,
+      total_wrong: totalWrong,
+      total_skipped: totalSkipped,
+      answered: allAnswers.filter((answer) => answer.selected_option_id != null)
+        .length,
+      total_questions: questions.length,
+      coins_earned: coinsEarned,
+      time_taken: timeTaken,
+    };
+  }
+
+  private async applyCoinsToUser(userId: number, coinsEarned: number) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) return;
+    user.total_coins = Number(user.total_coins ?? 0) + coinsEarned;
+    await this.userRepo.save(user);
+  }
+
+  
   async create(createTestDto: CreateTestDto) {
     const {
       title,
@@ -59,7 +186,14 @@ export class TestsService {
       chapterId,
       questions,
       divisions,
+      correct_marks: correctMarksIn,
+      negative_marks: negativeMarksIn,
+      skipped_marks: skippedMarksIn,
     } = createTestDto;
+
+    const correct_marks = correctMarksIn ?? 1;
+    const negative_marks = negativeMarksIn ?? 0;
+    const skipped_marks = skippedMarksIn ?? 0;
 
     return await this.dataSource.transaction(async (manager) => {
       // Validate category
@@ -120,6 +254,9 @@ export class TestsService {
           grade,
           subject,
           chapter,
+          correct_marks,
+          negative_marks,
+          skipped_marks,
         });
         await manager.save(test);
         const createdQuestions = await this.createQuestions(
@@ -136,6 +273,9 @@ export class TestsService {
             status: test.status,
             total_questions: test.total_questions,
             total_duration: test.total_duration,
+            correct_marks: Number(test.correct_marks),
+            negative_marks: Number(test.negative_marks),
+            skipped_marks: Number(test.skipped_marks),
             categoryId: category.id,
             gradeId: grade.id,
             subjectId: subject.id,
@@ -161,6 +301,9 @@ export class TestsService {
           total_questions,
           total_duration: duration_minutes,
           category,
+          correct_marks,
+          negative_marks,
+          skipped_marks,
         });
         await manager.save(test);
         const createdQuestions = await this.createQuestions(
@@ -177,6 +320,9 @@ export class TestsService {
             status: test.status,
             total_questions: test.total_questions,
             total_duration: test.total_duration,
+            correct_marks: Number(test.correct_marks),
+            negative_marks: Number(test.negative_marks),
+            skipped_marks: Number(test.skipped_marks),
             categoryId: category.id,
             gradeId: null,
             subjectId: null,
@@ -204,6 +350,9 @@ export class TestsService {
           total_questions,
           total_duration: duration_minutes,
           category,
+          correct_marks,
+          negative_marks,
+          skipped_marks,
         });
         await manager.save(parentTest);
 
@@ -232,6 +381,9 @@ export class TestsService {
             category,
             subject,
             parentTest,
+            correct_marks,
+            negative_marks,
+            skipped_marks,
           });
 
           await manager.save(divisionTest);
@@ -259,6 +411,9 @@ export class TestsService {
             status: parentTest.status,
             total_questions: parentTest.total_questions,
             total_duration: parentTest.total_duration,
+            correct_marks: Number(parentTest.correct_marks),
+            negative_marks: Number(parentTest.negative_marks),
+            skipped_marks: Number(parentTest.skipped_marks),
             categoryId: category.id,
             divisions: createdDivisions,
           },
@@ -411,6 +566,7 @@ export class TestsService {
           id: number;
           status: TestStatus;
           remaining_duration: number | null;
+          end_time: Date | null;
           attemptedCount: number;
           coins_earned: number;
         }
@@ -431,28 +587,39 @@ export class TestsService {
           id: number;
           status: TestStatus;
           remaining_duration: number | null;
+          end_time: Date | null;
           attemptedCount: number;
           coins_earned: number;
         }
       >();
-      for (const a of attempts) {
-        const testId = a.test?.id;
+      for (const attempt of attempts) {
+        const testId =  attempt.test?.id;
         if (testId == null) continue;
         const existing = map.get(testId);
         if (existing?.status === TestStatus.IN_PROGRESS) {
           continue;
         }
-        if (existing?.status === TestStatus.COMPLETED && a.status === TestStatus.COMPLETED) {
+        if (existing?.status === TestStatus.COMPLETED &&  attempt.status === TestStatus.COMPLETED) {
           continue;
         }
         const attemptedCount =
-          a.answers?.filter((ua) => ua.selected_option_id != null).length ?? 0;
+        attempt.answers?.filter((answer) => answer.selected_option_id != null).length ?? 0;
+        const remainingDuration = this.getAttemptRemainingDuration(attempt);
+        if (attempt.status === TestStatus.IN_PROGRESS && remainingDuration === 0) {
+          const expiredResult = await this.completeAttemptWithScore(attempt);
+          await this.applyCoinsToUser(userId, expiredResult.coins_earned);
+        }
+        const status =
+          attempt.status === TestStatus.IN_PROGRESS && remainingDuration === 0
+            ? TestStatus.COMPLETED
+            : attempt.status;
         map.set(testId, {
-          id: a.id,
-          status: a.status,
-          remaining_duration: a.remaining_duration ?? null,
+          id: attempt.id,
+          status,
+          remaining_duration: remainingDuration,
+          end_time: attempt.end_time ?? null,
           attemptedCount,
-          coins_earned: Number(a.coins_earned ?? 0),
+          coins_earned: Number(attempt.coins_earned ?? 0),
         });
       }
       return map;
@@ -469,52 +636,103 @@ export class TestsService {
           cat: CategoryName.SUBJECT_TEST,
         })
         .andWhere('test.status = :status', { status: Status.ACTIVE })
-        .orderBy('test.id', 'ASC')
-        .skip((page - 1) * limit)
-        .take(limit);
+        .orderBy('LOWER(subject.name)', 'ASC')
+        .addOrderBy('test.id', 'ASC');
 
       if (filters.gradeId != null) {
         qb.andWhere('grade.id = :gradeId', { gradeId: filters.gradeId });
       }
 
       if (search) {
-        qb.andWhere('test.title ILIKE :search', { search: `%${search}%` });
+        qb.andWhere(
+          '(test.title ILIKE :search OR subject.name ILIKE :search)',
+          { search: `%${search}%` },
+        );
       }
 
-      const [rawItems, total] = await qb.getManyAndCount();
+      const rawItems = await qb.getMany();
       const testIds = rawItems.map((t) => t.id);
       const attemptMap = await getLatestAttemptMap(testIds);
 
-      const items = rawItems.map((test) => {
-        const attempt = attemptMap.get(test.id);
-        const base = {
-          id: test.id,
-          title: test.title,
-          total_questions: test.total_questions,
-          total_duration: test.total_duration,
-          subject: test.subject?.name ?? null,
-          grade: test.grade?.name ?? null,
-        };
-        if (userId != null) {
-          const status =
-            attempt?.status === TestStatus.IN_PROGRESS
-              ? 'in_progress'
-              : attempt?.status === TestStatus.COMPLETED
-                ? 'completed'
-                : 'active';
-          if (attempt) {
-            return {
-              ...base,
-              status,
-              remaining_duration: attempt.remaining_duration,
-              attempted_questions: attempt.attemptedCount,
-              coins_earned: Number(attempt.coins_earned ?? 0),
-            };
-          }
-          return { ...base, status, coins_earned: 0 };
+      const subjectGroups = new Map<
+        string,
+        {
+          id: number;
+          title: string;
+          subject: { id: number | null; value: string };
+          grade: { id: number | null; value: string | null };
+          total_tests: number;
+          total_questions: number;
+          total_duration: number;
+          completed_tests: number;
+          in_progress_tests: number;
+          coins_earned: number;
         }
-        return base;
+      >();
+
+      for (const test of rawItems) {
+        const attempt = attemptMap.get(test.id);
+        const subjectName = test.subject?.name ?? 'General';
+        const gradeId = test.grade?.id ?? 0;
+        const groupKey = `${subjectName.toLowerCase()}::${gradeId}`;
+        const group = subjectGroups.get(groupKey) ?? {
+          id: test.id,
+          title: subjectName,
+          subject: { id: test.subject?.id ?? null, value: subjectName },
+          grade: { id: test.grade?.id ?? null, value: test.grade?.name ?? null },
+          total_tests: 0,
+          total_questions: 0,
+          total_duration: 0,
+          completed_tests: 0,
+          in_progress_tests: 0,
+          coins_earned: 0,
+        };
+
+        group.total_tests += 1;
+        group.total_questions += Number(test.total_questions ?? 0);
+        group.total_duration += Number(test.total_duration ?? 0);
+        if (attempt?.status === TestStatus.COMPLETED) {
+          group.completed_tests += 1;
+        }
+        if (attempt?.status === TestStatus.IN_PROGRESS) {
+          group.in_progress_tests += 1;
+        }
+        group.coins_earned += Number(attempt?.coins_earned ?? 0);
+
+        subjectGroups.set(groupKey, group);
+      }
+
+      const groupedItems = Array.from(subjectGroups.values()).map((group) => {
+        const progress_pct =
+          group.total_tests > 0
+            ? Math.round((group.completed_tests / group.total_tests) * 100)
+            : 0;
+        const status =
+          group.in_progress_tests > 0
+            ? 'in_progress'
+            : group.total_tests > 0 && group.completed_tests === group.total_tests
+              ? 'completed'
+              : 'active';
+
+        return {
+          id: group.id,
+          title: group.title,
+          subject: group.subject,
+          grade: group.grade,
+          total_questions: group.total_questions,
+          total_duration: group.total_duration,
+          total_tests: group.total_tests,
+          completed_tests: group.completed_tests,
+          in_progress_tests: group.in_progress_tests,
+          progress_pct,
+          status,
+          coins_earned: group.coins_earned,
+        };
       });
+
+      const total = groupedItems.length;
+      const start = (page - 1) * limit;
+      const items = groupedItems.slice(start, start + limit);
 
       return {
         data: {
@@ -577,69 +795,74 @@ export class TestsService {
       const attemptMap = await getLatestAttemptMap(testIds);
 
       const items = rawItems.map((test) => {
-        const hasDivisions = test.divisions && test.divisions.length > 0;
+        const divisions = test.divisions ?? [];
+        const hasDivisions = divisions.length > 0;
+        const total_tests = hasDivisions ? divisions.length : 1;
+        const total_questions = hasDivisions
+          ? divisions.reduce((sum, d) => sum + (d.total_questions ?? 0), 0)
+          : Number(test.total_questions ?? 0);
+        const total_duration = hasDivisions
+          ? divisions.reduce((sum, d) => sum + (d.total_duration ?? 0), 0)
+          : Number(test.total_duration ?? 0);
         const base = {
           id: test.id,
           title: test.title,
-          total_questions: test.total_questions,
-          total_duration: test.total_duration,
+          total_questions,
+          total_duration,
+          total_tests,
           entry_type: hasDivisions
             ? EntryType.WITH_DIVISIONS
             : EntryType.WITHOUT_DIVISIONS,
         };
 
-        if (userId != null) {
-          if (hasDivisions && test.divisions) {
-            const divisions = test.divisions;
-            let attempted_questions = 0;
-            let coins_earned = 0;
-            let remaining_duration_sum_sec = 0;
-            let hasInProgressDivision = false;
-            let allCompleted = true;
+        if (hasDivisions) {
+          let attempted_questions = 0;
+          let coins_earned = 0;
+          let remaining_duration_sum_sec = 0;
+          let completed_tests = 0;
+          let in_progress_tests = 0;
 
-            for (const div of divisions) {
-              const divAttempt = attemptMap.get(div.id);
-              if (divAttempt) {
-                attempted_questions += divAttempt.attemptedCount;
-                coins_earned += Number(divAttempt.coins_earned ?? 0);
-                if (divAttempt.status === TestStatus.IN_PROGRESS) {
-                  hasInProgressDivision = true;
-                }
-                if (divAttempt.status !== TestStatus.COMPLETED) {
-                  allCompleted = false;
-                }
-                const divRemainingSec =
-                  divAttempt.remaining_duration ??
-                  (div.total_duration != null ? div.total_duration * 60 : 0);
-                remaining_duration_sum_sec += divRemainingSec;
-              } else {
-                allCompleted = false;
-                remaining_duration_sum_sec += (div.total_duration ?? 0) * 60;
+          for (const div of divisions) {
+            const divAttempt = attemptMap.get(div.id);
+            if (divAttempt) {
+              attempted_questions += divAttempt.attemptedCount;
+              coins_earned += Number(divAttempt.coins_earned ?? 0);
+              if (divAttempt.status === TestStatus.IN_PROGRESS) {
+                in_progress_tests += 1;
               }
+              if (divAttempt.status === TestStatus.COMPLETED) {
+                completed_tests += 1;
+              }
+              const divRemainingSec =
+                divAttempt.remaining_duration ??
+                (div.total_duration != null ? div.total_duration * 60 : 0);
+              remaining_duration_sum_sec += divRemainingSec;
+            } else {
+              remaining_duration_sum_sec += (div.total_duration ?? 0) * 60;
             }
-            const remaining_duration =
-              remaining_duration_sum_sec > 0
-                ? remaining_duration_sum_sec
-                : null;
-            const total_questions = divisions.reduce(
-              (sum, d) => sum + (d.total_questions ?? 0),
-              0
-            );
-            const status = hasInProgressDivision
-              ? 'in_progress'
-              : allCompleted
-                ? 'completed'
-                : 'active';
-            return {
-              ...base,
-              total_questions,
-              status,
-              remaining_duration: remaining_duration ?? undefined,
-              attempted_questions,
-              coins_earned,
-            };
           }
+          const remaining_duration =
+            remaining_duration_sum_sec > 0 ? remaining_duration_sum_sec : null;
+          const status = in_progress_tests > 0
+            ? 'in_progress'
+            : completed_tests === total_tests
+              ? 'completed'
+              : 'active';
+          const progress_pct =
+            total_tests > 0 ? Math.round((completed_tests / total_tests) * 100) : 0;
+          return {
+            ...base,
+            status,
+            remaining_duration: remaining_duration ?? undefined,
+            attempted_questions,
+            completed_tests,
+            in_progress_tests,
+            progress_pct,
+            coins_earned,
+          };
+        }
 
+        if (userId != null) {
           const attempt = attemptMap.get(test.id);
           const status =
             attempt?.status === TestStatus.IN_PROGRESS
@@ -647,18 +870,37 @@ export class TestsService {
               : attempt?.status === TestStatus.COMPLETED
                 ? 'completed'
                 : 'active';
+          const completed_tests = status === 'completed' ? 1 : 0;
+          const in_progress_tests = status === 'in_progress' ? 1 : 0;
           if (attempt) {
             return {
               ...base,
               status,
-              remaining_duration: attempt.remaining_duration,
+              remaining_duration: this.getAttemptRemainingDuration(attempt),
               attempted_questions: attempt.attemptedCount,
+              completed_tests,
+              in_progress_tests,
+              progress_pct: completed_tests * 100,
               coins_earned: Number(attempt.coins_earned ?? 0),
             };
           }
-          return { ...base, status, coins_earned: 0 };
+          return {
+            ...base,
+            status,
+            completed_tests,
+            in_progress_tests,
+            progress_pct: 0,
+            coins_earned: 0,
+          };
         }
-        return base;
+        return {
+          ...base,
+          status: 'active',
+          completed_tests: 0,
+          in_progress_tests: 0,
+          progress_pct: 0,
+          coins_earned: 0,
+        };
       });
 
       return {
@@ -674,6 +916,242 @@ export class TestsService {
         },
       };
     }
+  }
+
+  async getSelectableTests(
+    filters: {
+      type: CategoryType;
+      subjectId?: number;
+      gradeId?: number;
+      testId?: number;
+      entryType?: EntryType;
+    },
+    userId?: number,
+  ) {
+    const getLatestAttemptMap = async (
+      testIds: number[],
+    ): Promise<
+      Map<
+        number,
+        {
+          id: number;
+          status: TestStatus;
+          remaining_duration: number | null;
+          end_time: Date | null;
+          attemptedCount: number;
+          coins_earned: number;
+        }
+      >
+    > => {
+      if (!userId || testIds.length === 0) return new Map();
+      const attempts = await this.testAttemptRepo.find({
+        where: {
+          user_id: userId,
+          test: { id: In(testIds) },
+        },
+        order: { id: 'DESC' },
+        relations: ['answers', 'test'],
+      });
+      const map = new Map<
+        number,
+        {
+          id: number;
+          status: TestStatus;
+          remaining_duration: number | null;
+          end_time: Date | null;
+          attemptedCount: number;
+          coins_earned: number;
+        }
+      >();
+      for (const attempt of attempts) {
+        const testId = attempt.test?.id;
+        if (testId == null) continue;
+        const existing = map.get(testId);
+        if (existing?.status === TestStatus.IN_PROGRESS) {
+          continue;
+        }
+        if (existing?.status === TestStatus.COMPLETED && attempt.status === TestStatus.COMPLETED) {
+          continue;
+        }
+        const attemptedCount =
+          attempt.answers?.filter((answer) => answer.selected_option_id != null).length ?? 0;
+        const remainingDuration = this.getAttemptRemainingDuration(attempt);
+        if (attempt.status === TestStatus.IN_PROGRESS && remainingDuration === 0) {
+          const expiredResult = await this.completeAttemptWithScore(attempt);
+          await this.applyCoinsToUser(userId, expiredResult.coins_earned);
+        }
+        const status =
+          attempt.status === TestStatus.IN_PROGRESS && remainingDuration === 0
+            ? TestStatus.COMPLETED
+            : attempt.status;
+        map.set(testId, {
+          id: attempt.id,
+          status,
+          remaining_duration: remainingDuration,
+          end_time: attempt.end_time ?? null,
+          attemptedCount,
+          coins_earned: Number(attempt.coins_earned ?? 0),
+        });
+      }
+      return map;
+    };
+
+    if (filters.type === CategoryType.SUBJECT_TEST) {
+      const qb = this.testRepo
+        .createQueryBuilder('test')
+        .leftJoinAndSelect('test.subject', 'subject')
+        .leftJoinAndSelect('test.chapter', 'chapter')
+        .leftJoinAndSelect('test.grade', 'grade')
+        .leftJoin('test.category', 'category')
+        .where('LOWER(category.name) = :cat', {
+          cat: CategoryName.SUBJECT_TEST,
+        })
+        .andWhere('test.status = :status', { status: Status.ACTIVE })
+        .orderBy('test.id', 'ASC');
+
+      qb.andWhere('subject.id = :subjectId', { subjectId: filters.subjectId });
+      if (filters.gradeId != null) {
+        qb.andWhere('grade.id = :gradeId', { gradeId: filters.gradeId });
+      }
+
+      const rawItems = await qb.getMany();
+      const testIds = rawItems.map((t) => t.id);
+      const attemptMap = await getLatestAttemptMap(testIds);
+
+      const items = rawItems.map((test) => {
+        const attempt = attemptMap.get(test.id);
+        const base = {
+          id: test.id,
+          title: test.title,
+          total_questions: test.total_questions,
+          total_duration: test.total_duration,
+          subject: test.subject?.name ?? null,
+          grade: test.grade?.name ?? null,
+        };
+        if (userId != null) {
+          const status =
+            attempt?.status === TestStatus.IN_PROGRESS
+              ? 'in_progress'
+              : attempt?.status === TestStatus.COMPLETED
+                ? 'completed'
+                : 'active';
+          if (attempt) {
+            return {
+              ...base,
+              status,
+              remaining_duration: this.getAttemptRemainingDuration(attempt),
+              attempted_questions: attempt.attemptedCount,
+              coins_earned: Number(attempt.coins_earned ?? 0),
+            };
+          }
+          return { ...base, status, coins_earned: 0 };
+        }
+        return base;
+      });
+
+      return { data: { items } };
+    }
+
+    if (
+      filters.type === CategoryType.ENTRY_TEST &&
+      (filters.testId != null || filters.entryType != null)
+    ) {
+      const qb = this.testRepo
+        .createQueryBuilder('academic_tests')
+        .leftJoinAndSelect('academic_tests.divisions', 'divisions')
+        .leftJoinAndSelect('academic_tests.subject', 'entrySubject')
+        .leftJoinAndSelect('academic_tests.grade', 'entryGrade')
+        .leftJoinAndSelect('divisions.subject', 'divisionSubject')
+        .leftJoinAndSelect('divisions.grade', 'divisionGrade')
+        .leftJoin('academic_tests.category', 'category')
+        .leftJoin('academic_tests.parentTest', 'parentTest')
+        .where('LOWER(category.name) = :cat', { cat: CategoryName.ENTRY_TEST })
+        .andWhere('academic_tests.parentTest IS NULL')
+        .andWhere('academic_tests.status = :status', { status: Status.ACTIVE })
+        .orderBy('academic_tests.id', 'ASC');
+
+      if (filters.testId != null) {
+        qb.andWhere('academic_tests.id = :testId', { testId: filters.testId });
+      } else if (filters.entryType === EntryType.WITH_DIVISIONS) {
+        qb.andWhere(`
+        EXISTS (
+          SELECT 1 FROM academic_tests child
+          WHERE child.parent_test_id = academic_tests.id
+        )
+      `);
+      } else if (filters.entryType === EntryType.WITHOUT_DIVISIONS) {
+        qb.andWhere(`
+        NOT EXISTS (
+          SELECT 1 FROM academic_tests child
+          WHERE child.parent_test_id = academic_tests.id
+        )
+      `);
+      }
+
+      const rawItems = await qb.getMany();
+      const selectableTests: Array<{
+        test: Test;
+        parent: Test | null;
+        entryType: EntryType;
+      }> = [];
+      for (const test of rawItems) {
+        if (test.divisions && test.divisions.length > 0) {
+          for (const division of test.divisions) {
+            selectableTests.push({
+              test: division,
+              parent: test,
+              entryType: EntryType.WITH_DIVISIONS,
+            });
+          }
+        } else {
+          selectableTests.push({
+            test,
+            parent: null,
+            entryType: EntryType.WITHOUT_DIVISIONS,
+          });
+        }
+      }
+      const testIds = selectableTests.map((item) => item.test.id);
+      const attemptMap = await getLatestAttemptMap(testIds);
+
+      const items = selectableTests.map(({ test, parent, entryType }) => {
+        const attempt = attemptMap.get(test.id);
+        const base = {
+          id: test.id,
+          title: test.title,
+          total_questions: test.total_questions,
+          total_duration: test.total_duration,
+          subject: test.subject?.name ?? parent?.subject?.name ?? null,
+          grade: test.grade?.name ?? parent?.grade?.name ?? null,
+          entry_type: entryType,
+          parent_test_id: parent?.id,
+        };
+
+        if (userId != null) {
+          const status =
+            attempt?.status === TestStatus.IN_PROGRESS
+              ? 'in_progress'
+              : attempt?.status === TestStatus.COMPLETED
+                ? 'completed'
+                : 'active';
+          if (attempt) {
+            return {
+              ...base,
+              status,
+              remaining_duration: this.getAttemptRemainingDuration(attempt),
+              attempted_questions: attempt.attemptedCount,
+              coins_earned: Number(attempt.coins_earned ?? 0),
+            };
+          }
+          return { ...base, status, coins_earned: 0 };
+        }
+        return base;
+      });
+
+      return { data: { items } };
+    }
+
+    throw new BadRequestException('Invalid filters for scoped available tests');
   }
 
   async getTestById(
@@ -698,8 +1176,18 @@ export class TestsService {
         id: number;
         status: TestStatus;
         remaining_duration: number | null;
+        end_time: Date | null;
         attemptedCount: number;
         coins_earned: number;
+        marks: number;
+        total_correct: number;
+        total_wrong: number;
+        total_skipped: number;
+        correct_marks: number;
+        negative_marks: number;
+        skipped_marks: number;
+        completed_time: Date | null;
+        time_taken: string | null;
       }
     >();
 
@@ -712,28 +1200,47 @@ export class TestsService {
         order: { id: 'DESC' },
         relations: ['answers', 'test'],
       });
-      for (const a of attempts) {
-        const tid = a.test?.id;
-        if (tid != null) {
-          const existing = attemptMap.get(tid);
+      for (const attempt of attempts) {
+        const testId = attempt.test?.id;
+        if (testId != null) {
+          const existing = attemptMap.get(testId);
           if (existing?.status === TestStatus.IN_PROGRESS) {
             continue;
           }
           if (
             existing?.status === TestStatus.COMPLETED &&
-            a.status === TestStatus.COMPLETED
+            attempt.status === TestStatus.COMPLETED
           ) {
             continue;
           }
           const attemptedCount =
-            a.answers?.filter((ua) => ua.selected_option_id != null).length ??
+            attempt.answers?.filter((answer) => answer.selected_option_id != null).length ??
             0;
-          attemptMap.set(tid, {
-            id: a.id,
-            status: a.status,
-            remaining_duration: a.remaining_duration ?? null,
+          const remainingDuration = this.getAttemptRemainingDuration(attempt);
+          if (attempt.status === TestStatus.IN_PROGRESS && remainingDuration === 0) {
+            const expiredResult = await this.completeAttemptWithScore(attempt);
+            await this.applyCoinsToUser(userId, expiredResult.coins_earned);
+          }
+          const status =
+            attempt.status === TestStatus.IN_PROGRESS && remainingDuration === 0
+              ? TestStatus.COMPLETED
+              : attempt.status;
+          attemptMap.set(testId, {
+            id: attempt.id,
+            status,
+            remaining_duration: remainingDuration,
+            end_time: attempt.end_time ?? null,
             attemptedCount,
-            coins_earned: Number(a.coins_earned ?? 0),
+            coins_earned: Number(attempt.coins_earned ?? 0),
+            marks: Number(attempt.marks ?? 0),
+            total_correct: Number(attempt.total_correct ?? 0),
+            total_wrong: Number(attempt.total_wrong ?? 0),
+            total_skipped: Number(attempt.total_skipped ?? 0),
+            correct_marks: Number(attempt.correct_marks ?? 0),
+            negative_marks: Number(attempt.negative_marks ?? 0),
+            skipped_marks: Number(attempt.skipped_marks ?? 0),
+            completed_time: attempt.completed_time ?? null,
+            time_taken: attempt.time_taken ?? null,
           });
         }
       }
@@ -744,6 +1251,9 @@ export class TestsService {
       title: test.title,
       total_questions: test.total_questions,
       total_duration: test.total_duration,
+      correct_marks: Number(test.correct_marks),
+      negative_marks: Number(test.negative_marks),
+      skipped_marks: Number(test.skipped_marks),
     };
 
     if (userId != null) {
@@ -756,19 +1266,35 @@ export class TestsService {
             : 'active'
       ) as TestDetailsBasic['status'];
       if (attempt) {
-        testDetails.remaining_duration = attempt.remaining_duration;
+        testDetails.remaining_duration = this.getAttemptRemainingDuration(attempt) ?? 0;
         testDetails.attempted_questions = attempt.attemptedCount;
+        testDetails.coins_earned = Number(attempt.coins_earned ?? 0);
+        if (attempt.status === TestStatus.COMPLETED) {
+          testDetails.marks = attempt.marks;
+          testDetails.total_correct = attempt.total_correct;
+          testDetails.total_wrong = attempt.total_wrong;
+          testDetails.total_skipped = attempt.total_skipped;
+          testDetails.correct_marks = attempt.correct_marks;
+          testDetails.negative_marks = attempt.negative_marks;
+          testDetails.skipped_marks = attempt.skipped_marks;
+          testDetails.completed_time = attempt.completed_time ?? undefined;
+          testDetails.time_taken = attempt.time_taken ?? undefined;
+        }
       }
     }
 
     if (test.divisions && test.divisions.length > 0) {
-      testDetails.divisions = test.divisions.map((division) => {
+      const divisionsOut: BasicTestDivision[] = [];
+      for (const division of test.divisions) {
         const divAttempt = attemptMap.get(division.id);
-        const base = {
+        const base: BasicTestDivision = {
           id: division.id,
           title: division.title,
           total_questions: division.total_questions,
           total_duration: division.total_duration,
+          correct_marks: Number(division.correct_marks),
+          negative_marks: Number(division.negative_marks),
+          skipped_marks: Number(division.skipped_marks),
         };
         if (userId != null) {
           const status = (
@@ -779,18 +1305,53 @@ export class TestsService {
                 : 'active'
           ) as TestDetailsBasic['status'];
           if (divAttempt) {
-            return {
+            const row: BasicTestDivision = {
               ...base,
               status,
-              remaining_duration: divAttempt.remaining_duration,
+              remaining_duration: this.getAttemptRemainingDuration(divAttempt),
               attempted_questions: divAttempt.attemptedCount,
               coins_earned: Number(divAttempt.coins_earned ?? 0),
             };
+            if (divAttempt.status === TestStatus.COMPLETED) {
+              row.marks = divAttempt.marks;
+              row.total_correct = divAttempt.total_correct;
+              row.total_wrong = divAttempt.total_wrong;
+              row.total_skipped = divAttempt.total_skipped;
+              row.correct_marks = divAttempt.correct_marks;
+              row.negative_marks = divAttempt.negative_marks;
+              row.skipped_marks = divAttempt.skipped_marks;
+              row.completed_time = divAttempt.completed_time ?? undefined;
+              row.time_taken = divAttempt.time_taken ?? undefined;
+            }
+            divisionsOut.push(row);
+          } else {
+            divisionsOut.push({ ...base, status });
           }
-          return { ...base, status };
+        } else {
+          divisionsOut.push(base);
         }
-        return base;
-      });
+      }
+      testDetails.divisions = divisionsOut;
+    }
+
+    const rawCategoryName = test.category?.name?.toLowerCase();
+    const isEntryTest = rawCategoryName === CategoryName.ENTRY_TEST;
+    if (isEntryTest) {
+      if (test.divisions && test.divisions.length > 0) {
+        testDetails.entry_total_questions = test.divisions.reduce(
+          (s, d) => s + Number(d.total_questions ?? 0),
+          0,
+        );
+        testDetails.entry_total_duration = test.divisions.reduce(
+          (s, d) => s + Number(d.total_duration ?? 0),
+          0,
+        );
+        testDetails.entry_divisions_count = test.divisions.length;
+      } else {
+        testDetails.entry_total_questions = Number(test.total_questions);
+        testDetails.entry_total_duration = Number(test.total_duration);
+        testDetails.entry_divisions_count = 1;
+      }
     }
 
     return { data: testDetails };
@@ -811,10 +1372,17 @@ export class TestsService {
         'answers',
         'answers.question',
       ],
+      order: { id: 'DESC' },
     });
 
     if (inProgressAttempt) {
-      const remainingDuration = inProgressAttempt.remaining_duration ?? 0;
+      const remainingDuration =
+        this.getAttemptRemainingDuration(inProgressAttempt) ?? 0;
+      if (remainingDuration <= 0) {
+        const expiredResult =
+          await this.completeAttemptWithScore(inProgressAttempt);
+        await this.applyCoinsToUser(authUserId, expiredResult.coins_earned);
+      } else {
 
       const allQuestions = inProgressAttempt.attemptedQuestions
         .sort((a, b) => a.question_order - b.question_order)
@@ -853,6 +1421,7 @@ export class TestsService {
           },
         },
       };
+      }
     }
 
     const test = await this.testRepo.findOne({ where: { id: test_id } });
@@ -896,13 +1465,15 @@ export class TestsService {
     }
 
     // Create new attempt
+    const startTime = new Date();
+    const durationSeconds = Number(test.total_duration ?? 0) * 60;
     const attempt = this.testAttemptRepo.create({
       user_id: authUserId,
       test,
       attempt_count,
-      start_time: new Date(),
+      start_time: startTime,
+      end_time: new Date(startTime.getTime() + durationSeconds * 1000),
       status: TestStatus.IN_PROGRESS,
-      remaining_duration: test.total_duration * 60,
     });
     await this.testAttemptRepo.save(attempt);
 
@@ -933,7 +1504,7 @@ export class TestsService {
       data: {
         test_attempt_id: attempt.id,
         resume: false,
-        duration: attempt.remaining_duration,
+        duration: this.getAttemptRemainingDuration(attempt),
         items,
         meta: {
           total: attemptedQuestions.length,
@@ -958,7 +1529,6 @@ export class TestsService {
   async saveTestProgress(
     authUserId: number,
     test_attempt_id: number,
-    remaining_duration: number,
     answers: {
       question_id: number;
       selected_option_id: number | null;
@@ -994,10 +1564,8 @@ export class TestsService {
       );
     }
 
-    if (remaining_duration !== undefined) {
-      attempt.remaining_duration = remaining_duration;
-      await this.testAttemptRepo.save(attempt);
-    }
+    const remainingDuration = this.getAttemptRemainingDuration(attempt) ?? 0;
+    const shouldAutoComplete = remainingDuration <= 0;
 
     // Save answers
     const questionMap = new Map(questions.map((q) => [q.id, q]));
@@ -1006,9 +1574,10 @@ export class TestsService {
 
       if (!question) continue;
 
-      const isCorrect =
-        ans.selected_option_id !== null &&
-        question.correctOptionId === ans.selected_option_id;
+      const isCorrect: boolean | null =
+        ans.selected_option_id == null
+          ? null
+          : question.correctOptionId === ans.selected_option_id;
 
       let userAnswer = await this.userAnswerRepo.findOne({
         where: {
@@ -1032,13 +1601,26 @@ export class TestsService {
       await this.userAnswerRepo.save(userAnswer);
     }
 
-    return { message: 'Progress saved successfully' };
+    if (shouldAutoComplete) {
+      const expiredResult = await this.completeAttemptWithScore(attempt);
+      await this.applyCoinsToUser(authUserId, expiredResult.coins_earned);
+    } else {
+      attempt.remaining_duration = remainingDuration;
+      await this.testAttemptRepo.save(attempt);
+    }
+
+    return {
+      message: 'Progress saved successfully',
+      data: {
+        status: attempt.status,
+        remaining_duration: this.getAttemptRemainingDuration(attempt) ?? 0,
+      },
+    };
   }
 
   async submitTest(
     authUserId: number,
     test_attempt_id: number,
-    remaining_duration: number,
     answers: { question_id: number; selected_option_id: number | null }[]
   ) {
     const attempt = await this.testAttemptRepo.findOne({
@@ -1065,7 +1647,6 @@ export class TestsService {
     const invalidQuestions = answers.filter(
       (ans) => !validQuestionIds.has(ans.question_id)
     );
-
     if (invalidQuestions.length > 0) {
       throw new BadRequestException(
         'Some questions do not belong to this test.'
@@ -1077,21 +1658,27 @@ export class TestsService {
       relations: ['question'],
     });
 
-    const alreadyAnsweredQuestionIds = new Set(
-      existingAnswers.map((ua) => ua.question.id)
+    const questionMap = new Map(attempt.test.questions.map((q) => [q.id, q]));
+    const existingAnswersByQuestionId = new Map(
+      existingAnswers
+        .filter((answer) => answer.question?.id != null)
+        .map((answer) => [answer.question.id, answer])
     );
 
-    const questionMap = new Map(attempt.test.questions.map((q) => [q.id, q]));
-
-    // Allow ONLY unanswered questions
-    const newAnswers = answers
-      .filter((ans) => !alreadyAnsweredQuestionIds.has(ans.question_id))
+    const answersToSave = answers
       .map((ans) => {
         const question = questionMap.get(ans.question_id)!;
+        const isCorrect: boolean | null =
+          ans.selected_option_id == null
+            ? null
+            : question.correctOptionId === ans.selected_option_id;
 
-        const isCorrect =
-          ans.selected_option_id !== null &&
-          question.correctOptionId === ans.selected_option_id;
+        const existingAnswer = existingAnswersByQuestionId.get(ans.question_id);
+        if (existingAnswer) {
+          existingAnswer.selected_option_id = ans.selected_option_id;
+          existingAnswer.isCorrect = isCorrect;
+          return existingAnswer;
+        }
 
         return this.userAnswerRepo.create({
           testAttempt: attempt,
@@ -1101,57 +1688,11 @@ export class TestsService {
         });
       });
 
-    if (newAnswers.length > 0) {
-      await this.userAnswerRepo.save(newAnswers);
+    if (answersToSave.length > 0) {
+      await this.userAnswerRepo.save(answersToSave);
     }
 
-    if (remaining_duration !== undefined) {
-      attempt.remaining_duration = remaining_duration;
-    }
-
-    // Calculate result from ALL answers
-    const allAnswers = await this.userAnswerRepo.find({
-      where: { testAttempt: { id: attempt.id } },
-      relations: ['question'],
-    });
-
-    const NEGATIVE_MARKS = Number(process.env.NEGATIVE_MARKS ?? 0);
-
-    let marks = 0;
-    let total_correct = 0;
-    let total_wrong = 0;
-
-    // Count unanswered questions as wrong
-    const answeredQuestionIds = new Set(allAnswers.map((a) => a.question.id));
-    const unansweredQuestions = attempt.test.questions.filter(
-      (q) => !answeredQuestionIds.has(q.id)
-    );
-
-    total_wrong += unansweredQuestions.length;
-    marks -= unansweredQuestions.length * NEGATIVE_MARKS;
-
-    for (const ua of allAnswers) {
-      if (ua.isCorrect) {
-        total_correct++;
-        marks++;
-      } else {
-        total_wrong++;
-        marks -= NEGATIVE_MARKS;
-      }
-    }
-
-    if (marks < 0) marks = 0;
-
-    const coins_earned = total_correct * 10;
-
-    attempt.status = TestStatus.COMPLETED;
-    attempt.end_time = new Date();
-    attempt.marks = marks;
-    attempt.total_correct = total_correct;
-    attempt.total_wrong = total_wrong;
-    attempt.coins_earned = coins_earned;
-
-    await this.testAttemptRepo.save(attempt);
+    const result = await this.completeAttemptWithScore(attempt);
 
     await this.testAttemptRepo
       .createQueryBuilder()
@@ -1163,27 +1704,23 @@ export class TestsService {
       .andWhere('id <> :currentAttemptId', { currentAttemptId: attempt.id })
       .execute();
 
-    const user = await this.userRepo.findOne({
-      where: { id: authUserId },
-    });
-    if (user) {
-      user.total_coins = Number(user.total_coins ?? 0) + coins_earned;
-      await this.userRepo.save(user);
-    }
+    await this.applyCoinsToUser(authUserId, result.coins_earned);
 
     return {
       message: 'Test submitted successfully',
       data: {
         attempt_id: attempt.id,
-        marks,
-        total_correct,
-        total_wrong,
+        marks: result.marks,
+        total_correct: result.total_correct,
+        total_wrong: result.total_wrong,
         status: attempt.status,
-        answered: allAnswers.length,
-        remaining_duration: attempt.remaining_duration,
-        total_questions: attempt.test.questions.length,
-        unanswered: unansweredQuestions.length,
-        coins_earned,
+        answered: result.answered,
+        remaining_duration: this.getAttemptRemainingDuration(attempt),
+        total_questions: result.total_questions,
+        total_skipped: result.total_skipped,
+        unanswered: result.total_skipped,
+        coins_earned: result.coins_earned,
+        time_taken: result.time_taken,
       },
     };
   }

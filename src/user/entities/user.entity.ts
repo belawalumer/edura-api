@@ -47,7 +47,12 @@ export class User {
   @Column({ default: false })
   isSuspended: boolean;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 4,
+    default: 0,
+  })
   total_coins: number;
 
   @CreateDateColumn()

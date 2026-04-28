@@ -27,11 +27,6 @@ export class SubmitTestDto {
   @IsNotEmpty()
   test_attempt_id: number;
 
-  @ApiProperty({ example: 60 })
-  @IsInt()
-  @IsNotEmpty()
-  remaining_duration: number;
-
   @ApiProperty({ type: AnswerDto })
   @IsArray()
   @ValidateNested({ each: true })

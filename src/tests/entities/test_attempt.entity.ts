@@ -33,6 +33,9 @@ export class TestAttempt {
   @Column({ type: 'timestamp', nullable: true })
   end_time: Date;
 
+  @Column({ type: 'timestamp', nullable: true })
+  completed_time: Date;
+
   @Column({ type: 'float', default: 0 })
   marks: number;
 
@@ -41,6 +44,33 @@ export class TestAttempt {
 
   @Column({ type: 'int', default: 0 })
   total_wrong: number;
+
+  @Column({ type: 'int', default: 0 })
+  total_skipped: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 4,
+    default: 1,
+  })
+  correct_marks: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 4,
+    default: 0,
+  })
+  negative_marks: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 4,
+    default: 0,
+  })
+  skipped_marks: number;
 
   @Column({
     type: 'enum',
@@ -53,8 +83,16 @@ export class TestAttempt {
   @Column({ type: 'int', nullable: true })
   remaining_duration: number;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 4,
+    default: 0,
+  })
   coins_earned: number;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  time_taken: string;
 
   @OneToMany(() => UserAnswer, (ua) => ua.testAttempt, {
     cascade: ['insert'],

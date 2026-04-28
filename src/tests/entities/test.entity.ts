@@ -37,6 +37,33 @@ export class Test {
   @Column({ type: 'int' })
   total_duration: number;
 
+  @Column({
+    name: 'correct_marks',
+    type: 'decimal',
+    precision: 10,
+    scale: 4,
+    default: 1,
+  })
+  correct_marks: number;
+
+  @Column({
+    name: 'negative_marks',
+    type: 'decimal',
+    precision: 10,
+    scale: 4,
+    default: 0,
+  })
+  negative_marks: number;
+
+  @Column({
+    name: 'skipped_marks',
+    type: 'decimal',
+    precision: 10,
+    scale: 4,
+    default: 0,
+  })
+  skipped_marks: number;
+
   @ManyToOne(() => Test, (test) => test.divisions, {
     nullable: true,
     onDelete: 'CASCADE',

@@ -22,7 +22,10 @@ import { SubmitTestDto } from './dto/submit-test-dto';
 import type { RequestWithUser } from 'src/auth/guard/auth_guard';
 import { CategoryType, UserRole } from 'src/common/enums';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
-import { AvailableTestsQueryDto } from './dto/get-available-test-dto';
+import {
+  AvailableTestsQueryDto,
+  SelectableTestsQueryDto,
+} from './dto/get-available-test-dto';
 
 @UseGuards(AuthGuard)
 @Controller('academic_tests')
@@ -50,6 +53,63 @@ export class TestsController {
     return this.testsService.remove(id);
   }
 
+  @Get('available/select')
+  @Public()
+  async getSelectableTests(
+    @Query() query: SelectableTestsQueryDto,
+    @Req() req: RequestWithUser
+  ) {
+    const { type, subjectId, gradeId, testId, entryType } = query;
+    const parsedSubjectId =
+      subjectId != null && subjectId !== ''
+        ? parseInt(String(subjectId), 10)
+        : undefined;
+    const parsedGradeId =
+      gradeId != null && gradeId !== ''
+        ? parseInt(String(gradeId), 10)
+        : undefined;
+    const parsedTestId =
+      testId != null && testId !== ''
+        ? parseInt(String(testId), 10)
+        : undefined;
+
+    if (type === CategoryType.SUBJECT_TEST) {
+      if (parsedSubjectId == null) {
+        throw new BadRequestException(
+          'subjectId query parameter is required when type is subject',
+        );
+      }
+      if (parsedSubjectId != null && Number.isNaN(parsedSubjectId)) {
+        throw new BadRequestException('subjectId must be a valid number');
+      }
+      if (parsedGradeId == null || Number.isNaN(parsedGradeId)) {
+        throw new BadRequestException('gradeId must be a valid number');
+      }
+    }
+    if (type === CategoryType.ENTRY_TEST) {
+      if (!entryType && parsedTestId == null) {
+        throw new BadRequestException(
+          'entryType or testId query parameter is required when type is entry',
+        );
+      }
+      if (parsedTestId != null && Number.isNaN(parsedTestId)) {
+        throw new BadRequestException('testId must be a valid number');
+      }
+    }
+
+    const userId = req.user?.id;
+    return this.testsService.getSelectableTests(
+      {
+        type,
+        subjectId: parsedSubjectId,
+        gradeId: parsedGradeId,
+        testId: parsedTestId,
+        entryType,
+      },
+      userId,
+    );
+  }
+
   @Get('available')
   @Public()
   async getAvailableTests(
@@ -59,12 +119,11 @@ export class TestsController {
     const { type, gradeId, entryType } = query;
 
     const parsedGradeId =
-      type === CategoryType.SUBJECT_TEST && gradeId != null && gradeId !== ''
+      gradeId != null && gradeId !== ''
         ? parseInt(String(gradeId), 10)
         : undefined;
 
     if (
-      type === CategoryType.SUBJECT_TEST &&
       parsedGradeId !== undefined &&
       Number.isNaN(parsedGradeId)
     ) {
@@ -97,7 +156,7 @@ export class TestsController {
     @Query() pagination: PaginationQueryDto
   ) {
     const { page = 1, limit = 10 } = pagination;
-    return this.testsService.startTest(req.user!.id!, dto.test_id, page, limit);
+    return this.testsService.startTest(req.user?.id!, dto.test_id, page, limit);
   }
 
   @Post('progress')
@@ -106,7 +165,6 @@ export class TestsController {
     return this.testsService.saveTestProgress(
       req.user!.id!,
       dto.test_attempt_id,
-      dto.remaining_duration,
       dto.answers
     );
   }
@@ -115,9 +173,8 @@ export class TestsController {
   @Roles(UserRole.USER)
   submitTest(@Req() req: RequestWithUser, @Body() dto: SubmitTestDto) {
     return this.testsService.submitTest(
-      req.user!.id!,
+      req.user?.id!,
       dto.test_attempt_id,
-      dto.remaining_duration,
       dto.answers
     );
   }
