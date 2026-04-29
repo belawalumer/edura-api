@@ -2,6 +2,7 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
+import * as bcrypt from 'bcrypt';
 import { IsNull, Repository } from 'typeorm';
 import { AppDataSource } from './src/data-source';
 import {
@@ -9,7 +10,10 @@ import {
   EmploymentStatus,
   Gender,
   Status,
+  UserRole,
 } from './src/common/enums';
+import { User } from './src/user/entities/user.entity';
+import { generateRefreshToken } from './src/auth/helpers/token.helper';
 import { Faq } from './src/faqs/entities/faq.entity';
 import { Category } from './src/categories/entities/category.entity';
 import { Grade } from './src/grades/entities/grade.entity';
@@ -291,7 +295,6 @@ async function ensureEntryTestWithDivisions(
       subject: Subject;
       total_duration: number;
       questions: QuestionSeed[];
-      /** Optional; defaults to parent payload marking, then API defaults. */
       correct_marks?: number;
       negative_marks?: number;
       skipped_marks?: number;
@@ -489,9 +492,50 @@ async function ensureCollegeWithMerits(
   }
 }
 
+async function seedAdmin() {
+  const userRepo = AppDataSource.getRepository(User);
+
+  const adminPhone = process.env.ADMIN_PHONE?.trim() ?? '';
+  const adminPassword = process.env.ADMIN_PASSWORD ?? '';
+  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase() ?? '';
+
+  if (!adminPhone || !adminPassword || !adminEmail) {
+    console.log('Skipping admin creation: ADMIN_PHONE, ADMIN_PASSWORD, ADMIN_EMAIL not set');
+    return;
+  }
+
+  const existingAdmin = await userRepo.findOne({
+    where: [{ phone: adminPhone }, { email: adminEmail }],
+  });
+
+  if (existingAdmin) {
+    console.log('Admin already exists');
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(adminPassword, 10);
+  const refreshToken = generateRefreshToken();
+
+  await userRepo.save(
+    userRepo.create({
+      name: 'Admin',
+      phone: adminPhone,
+      email: adminEmail,
+      password: hashedPassword,
+      role: UserRole.ADMIN,
+      image: null,
+      refreshToken,
+    })
+  );
+
+  console.log('Admin created successfully');
+}
+
 async function seed() {
   try {
     await AppDataSource.initialize();
+
+    await seedAdmin();
 
     const faqRepo = AppDataSource.getRepository(Faq);
     const categoryRepo = AppDataSource.getRepository(Category);
@@ -544,7 +588,7 @@ async function seed() {
       'Past papers include boards commonly used in Pakistan such as BISE Lahore, BISE Karachi, and FBISE Islamabad.'
     );
 
-    // Internet-sourced announcements
+    // Announcements
     await ensureAnnouncement(announcementRepo, {
       title: 'HEC opens HAT registrations for graduate admissions',
       description:
@@ -567,61 +611,6 @@ async function seed() {
       ctaLink: 'https://propakistani.pk/2026/04/16/pmdc-introduces-mandatory-requirement-for-mdcat-2026/',
       image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b',
     });
-    // Testimonials (dashboard/home); idempotent by name — complements migration seed rows.
-    const testimonialSeeds = [
-      {
-        name: 'Ahmed Khan',
-        role: 'Medical Student',
-        text: 'Edura helped me crack my medical entrance exam. The practice tests were incredibly similar to the real exam.',
-        avatar:
-          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop',
-        rating: 5,
-      },
-      {
-        name: 'Fatima Ali',
-        role: 'Engineering Aspirant',
-        text: 'The roadmap feature guided me through every step of my university application. Highly recommended!',
-        avatar:
-          'https://images.unsplash.com/photo-1494790108378-be9c29b29330?w=150&h=150&fit=crop',
-        rating: 5,
-      },
-      {
-        name: 'Bilal Hassan',
-        role: 'Job Seeker',
-        text: 'Found my dream job through Edura job board. The application process was seamless.',
-        avatar:
-          'https://images.unsplash.com/photo-1500648767791-62f6e5a8f9e5?w=150&h=150&fit=crop',
-        rating: 5,
-      },
-      {
-        name: 'Ayesha Siddiqui',
-        role: 'CS Student',
-        text: 'The past papers section saved my semester. Amazing resource for computer science students!',
-        avatar:
-          'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop',
-        rating: 5,
-      },
-      {
-        name: 'Hassan Raza',
-        role: 'Business Administration',
-        text: 'Entry test preparation has never been this organized. Edura made my dream of studying abroad come true.',
-        avatar:
-          'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop',
-        rating: 5,
-      },
-      {
-        name: 'Zara Khan',
-        role: 'Law Student',
-        text: 'The analytics helped me identify weak areas and improve. Now I am studying at my dream law school!',
-        avatar:
-          'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop',
-        rating: 5,
-      },
-    ];
-    for (const t of testimonialSeeds) {
-      await ensureTestimonial(testimonialRepo, t);
-    }
-
     await ensureAnnouncement(announcementRepo, {
       title: 'UET ECAT Fall 2026 phase-2 registration details',
       description:
@@ -634,7 +623,56 @@ async function seed() {
       image: 'https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e',
     });
 
-    // Base taxonomy for tests
+    // Testimonials
+    const testimonialSeeds = [
+      {
+        name: 'Ahmed Khan',
+        role: 'Medical Student',
+        text: 'Edura helped me crack my medical entrance exam. The practice tests were incredibly similar to the real exam.',
+        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop',
+        rating: 5,
+      },
+      {
+        name: 'Fatima Ali',
+        role: 'Engineering Aspirant',
+        text: 'The roadmap feature guided me through every step of my university application. Highly recommended!',
+        avatar: 'https://images.unsplash.com/photo-1494790108378-be9c29b29330?w=150&h=150&fit=crop',
+        rating: 5,
+      },
+      {
+        name: 'Bilal Hassan',
+        role: 'Job Seeker',
+        text: 'Found my dream job through Edura job board. The application process was seamless.',
+        avatar: 'https://images.unsplash.com/photo-1500648767791-62f6e5a8f9e5?w=150&h=150&fit=crop',
+        rating: 5,
+      },
+      {
+        name: 'Ayesha Siddiqui',
+        role: 'CS Student',
+        text: 'The past papers section saved my semester. Amazing resource for computer science students!',
+        avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop',
+        rating: 5,
+      },
+      {
+        name: 'Hassan Raza',
+        role: 'Business Administration',
+        text: 'Entry test preparation has never been this organized. Edura made my dream of studying abroad come true.',
+        avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop',
+        rating: 5,
+      },
+      {
+        name: 'Zara Khan',
+        role: 'Law Student',
+        text: 'The analytics helped me identify weak areas and improve. Now I am studying at my dream law school!',
+        avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop',
+        rating: 5,
+      },
+    ];
+    for (const t of testimonialSeeds) {
+      await ensureTestimonial(testimonialRepo, t);
+    }
+
+    // Base taxonomy
     const subjectTestsCategory = await ensureByName(categoryRepo, 'subject tests');
     const entryTestsCategory = await ensureByName(categoryRepo, 'entry tests');
     subjectTestsCategory.status = Status.ACTIVE;
@@ -661,13 +699,9 @@ async function seed() {
     const gs12Physics = await ensureGradeSubject(gradeSubjectRepo, grade12, physics);
 
     const trigChapter = await ensureChapter(chapterRepo, 'Trigonometry', gs11Math);
-    const electroChapter = await ensureChapter(
-      chapterRepo,
-      'Electrostatics',
-      gs12Physics
-    );
+    const electroChapter = await ensureChapter(chapterRepo, 'Electrostatics', gs12Physics);
 
-    // Subject tests (Pakistan-relevant)
+    // Subject tests
     await ensureSubjectTest(testRepo, questionRepo, optionRepo, {
       title: 'FSc Part-I Mathematics - Trigonometry Drill',
       category: subjectTestsCategory,
@@ -1191,12 +1225,12 @@ async function seed() {
       },
     ];
 
-    for (const seed of jobsSeed) {
+    for (const s of jobsSeed) {
       let job = await jobRepo.findOne({
         where: {
-          title: seed.title,
-          location: { id: seed.location.id },
-          industry: { id: seed.industry.id },
+          title: s.title,
+          location: { id: s.location.id },
+          industry: { id: s.industry.id },
         },
         relations: ['location', 'industry', 'preferredCandidate'],
       });
@@ -1204,26 +1238,26 @@ async function seed() {
       if (!job) {
         job = await jobRepo.save(
           jobRepo.create({
-            title: seed.title,
-            industry: seed.industry,
-            department: seed.department,
-            location: seed.location,
-            division: seed.division,
-            district: seed.district,
-            careerLevel: seed.careerLevel,
-            degree_level: seed.degree_level,
-            degree_area: seed.degree_area,
-            total_positions: seed.total_positions,
-            role: seed.role,
-            project: seed.project,
-            employment_status: seed.employment_status,
-            monthly_salary: seed.monthly_salary,
-            job_description: seed.job_description,
-            notes: seed.notes,
-            level: seed.level,
-            status: seed.status,
-            job_posted: seed.job_posted,
-            last_date_to_apply: seed.last_date_to_apply,
+            title: s.title,
+            industry: s.industry,
+            department: s.department,
+            location: s.location,
+            division: s.division,
+            district: s.district,
+            careerLevel: s.careerLevel,
+            degree_level: s.degree_level,
+            degree_area: s.degree_area,
+            total_positions: s.total_positions,
+            role: s.role,
+            project: s.project,
+            employment_status: s.employment_status,
+            monthly_salary: s.monthly_salary,
+            job_description: s.job_description,
+            notes: s.notes,
+            level: s.level,
+            status: s.status,
+            job_posted: s.job_posted,
+            last_date_to_apply: s.last_date_to_apply,
           })
         );
       }
@@ -1231,7 +1265,7 @@ async function seed() {
       if (!job.preferredCandidate) {
         await preferredRepo.save(
           preferredRepo.create({
-            ...seed.preferred_candidate,
+            ...s.preferred_candidate,
             job,
           })
         );
@@ -1284,7 +1318,7 @@ async function seed() {
       await ensureUniversityWithMerits(universityRepo, universityMeritRepo, item);
     }
 
-    // Colleges + merit lists (after Matric)
+    // Colleges + merit lists
     const collegeSeed = [
       { name: 'Government College Lahore', city: 'Lahore', merits: [{ degree: 'FSc Pre-Medical', lastYearClosingMerit: 89.5 }, { degree: 'FSc Pre-Engineering', lastYearClosingMerit: 87.8 }, { degree: 'ICS Computer Science', lastYearClosingMerit: 84.6 }] },
       { name: 'Punjab College Lahore', city: 'Lahore', merits: [{ degree: 'FSc Pre-Medical', lastYearClosingMerit: 86.2 }, { degree: 'FSc Pre-Engineering', lastYearClosingMerit: 84.9 }, { degree: 'ICOM', lastYearClosingMerit: 79.4 }] },
@@ -1308,46 +1342,14 @@ async function seed() {
     const boardExams = await ensureExamCategory(examCategoryRepo, 'Board Exams');
     const entryExams = await ensureExamCategory(examCategoryRepo, 'Entry Tests');
 
-    const biseLahore = await ensureExamCategory(
-      examCategoryRepo,
-      'BISE Lahore',
-      boardExams
-    );
-    const biseRawalpindi = await ensureExamCategory(
-      examCategoryRepo,
-      'BISE Rawalpindi',
-      boardExams
-    );
-    const biseFaisalabad = await ensureExamCategory(
-      examCategoryRepo,
-      'BISE Faisalabad',
-      boardExams
-    );
-    const biseMultan = await ensureExamCategory(
-      examCategoryRepo,
-      'BISE Multan',
-      boardExams
-    );
-    const biseKarachi = await ensureExamCategory(
-      examCategoryRepo,
-      'BISE Karachi',
-      boardExams
-    );
-    const bisePeshawar = await ensureExamCategory(
-      examCategoryRepo,
-      'BISE Peshawar',
-      boardExams
-    );
-    const biseQuetta = await ensureExamCategory(
-      examCategoryRepo,
-      'BISE Quetta',
-      boardExams
-    );
-    const fbise = await ensureExamCategory(
-      examCategoryRepo,
-      'FBISE Islamabad',
-      boardExams
-    );
+    const biseLahore = await ensureExamCategory(examCategoryRepo, 'BISE Lahore', boardExams);
+    const biseRawalpindi = await ensureExamCategory(examCategoryRepo, 'BISE Rawalpindi', boardExams);
+    const biseFaisalabad = await ensureExamCategory(examCategoryRepo, 'BISE Faisalabad', boardExams);
+    const biseMultan = await ensureExamCategory(examCategoryRepo, 'BISE Multan', boardExams);
+    const biseKarachi = await ensureExamCategory(examCategoryRepo, 'BISE Karachi', boardExams);
+    const bisePeshawar = await ensureExamCategory(examCategoryRepo, 'BISE Peshawar', boardExams);
+    const biseQuetta = await ensureExamCategory(examCategoryRepo, 'BISE Quetta', boardExams);
+    const fbise = await ensureExamCategory(examCategoryRepo, 'FBISE Islamabad', boardExams);
 
     const mdcat = await ensureExamCategory(examCategoryRepo, 'MDCAT', entryExams);
     const ecat = await ensureExamCategory(examCategoryRepo, 'ECAT', entryExams);
@@ -1360,166 +1362,54 @@ async function seed() {
       year: number;
       file: string;
     }> = [
-      {
-        category: boardExams,
-        board: biseLahore,
-        grade: grade11,
-        subject: math,
-        year: 2023,
-        file: 'https://example.com/past-papers/pakistan/bise-lahore-grade11-math-2023.pdf',
-      },
-      {
-        category: boardExams,
-        board: biseLahore,
-        grade: grade12,
-        subject: chemistry,
-        year: 2022,
-        file: 'https://www.biselahore.com/',
-      },
-      {
-        category: boardExams,
-        board: biseRawalpindi,
-        grade: grade11,
-        subject: physics,
-        year: 2023,
-        file: 'https://biserawalpindi.edu.pk/',
-      },
-      {
-        category: boardExams,
-        board: biseRawalpindi,
-        grade: grade12,
-        subject: biology,
-        year: 2022,
-        file: 'https://biserawalpindi.edu.pk/',
-      },
-      {
-        category: boardExams,
-        board: biseFaisalabad,
-        grade: grade11,
-        subject: chemistry,
-        year: 2023,
-        file: 'https://www.bisefsd.edu.pk/',
-      },
-      {
-        category: boardExams,
-        board: biseMultan,
-        grade: grade12,
-        subject: math,
-        year: 2021,
-        file: 'https://web.bisemultan.edu.pk/',
-      },
-      {
-        category: boardExams,
-        board: fbise,
-        grade: grade12,
-        subject: physics,
-        year: 2022,
-        file: 'https://example.com/past-papers/pakistan/fbise-grade12-physics-2022.pdf',
-      },
-      {
-        category: boardExams,
-        board: fbise,
-        grade: grade11,
-        subject: chemistry,
-        year: 2023,
-        file: 'https://www.fbise.edu.pk/AllOldPapers.php',
-      },
-      {
-        category: boardExams,
-        board: fbise,
-        grade: grade12,
-        subject: biology,
-        year: 2024,
-        file: 'https://www.fbise.edu.pk/Old%20Question%20Paper.php',
-      },
-      {
-        category: boardExams,
-        board: biseKarachi,
-        grade: grade12,
-        subject: chemistry,
-        year: 2021,
-        file: 'https://example.com/past-papers/pakistan/bise-karachi-grade12-chemistry-2021.pdf',
-      },
-      {
-        category: boardExams,
-        board: biseKarachi,
-        grade: grade11,
-        subject: math,
-        year: 2023,
-        file: 'https://www.biek.edu.pk/',
-      },
-      {
-        category: boardExams,
-        board: bisePeshawar,
-        grade: grade12,
-        subject: physics,
-        year: 2022,
-        file: 'https://www.bisep.edu.pk/',
-      },
-      {
-        category: boardExams,
-        board: biseQuetta,
-        grade: grade11,
-        subject: biology,
-        year: 2022,
-        file: 'https://bbiseqta.edu.pk/',
-      },
-      {
-        category: mdcat,
-        board: null,
-        grade: null,
-        subject: biology,
-        year: 2023,
-        file: 'https://www.pmdc.pk/Admissions/MedicalandDentalCollegeAdmissionTestMDCAT.aspx',
-      },
-      {
-        category: ecat,
-        board: null,
-        grade: null,
-        subject: math,
-        year: 2022,
-        file: 'https://admission.uet.edu.pk/',
-      },
-      {
-        category: ecat,
-        board: null,
-        grade: null,
-        subject: physics,
-        year: 2023,
-        file: 'https://admission.uet.edu.pk/',
-      },
+      { category: boardExams, board: biseLahore, grade: grade11, subject: math, year: 2023, file: 'https://example.com/past-papers/pakistan/bise-lahore-grade11-math-2023.pdf' },
+      { category: boardExams, board: biseLahore, grade: grade12, subject: chemistry, year: 2022, file: 'https://www.biselahore.com/' },
+      { category: boardExams, board: biseRawalpindi, grade: grade11, subject: physics, year: 2023, file: 'https://biserawalpindi.edu.pk/' },
+      { category: boardExams, board: biseRawalpindi, grade: grade12, subject: biology, year: 2022, file: 'https://biserawalpindi.edu.pk/' },
+      { category: boardExams, board: biseFaisalabad, grade: grade11, subject: chemistry, year: 2023, file: 'https://www.bisefsd.edu.pk/' },
+      { category: boardExams, board: biseMultan, grade: grade12, subject: math, year: 2021, file: 'https://web.bisemultan.edu.pk/' },
+      { category: boardExams, board: fbise, grade: grade12, subject: physics, year: 2022, file: 'https://example.com/past-papers/pakistan/fbise-grade12-physics-2022.pdf' },
+      { category: boardExams, board: fbise, grade: grade11, subject: chemistry, year: 2023, file: 'https://www.fbise.edu.pk/AllOldPapers.php' },
+      { category: boardExams, board: fbise, grade: grade12, subject: biology, year: 2024, file: 'https://www.fbise.edu.pk/Old%20Question%20Paper.php' },
+      { category: boardExams, board: biseKarachi, grade: grade12, subject: chemistry, year: 2021, file: 'https://example.com/past-papers/pakistan/bise-karachi-grade12-chemistry-2021.pdf' },
+      { category: boardExams, board: biseKarachi, grade: grade11, subject: math, year: 2023, file: 'https://www.biek.edu.pk/' },
+      { category: boardExams, board: bisePeshawar, grade: grade12, subject: physics, year: 2022, file: 'https://www.bisep.edu.pk/' },
+      { category: boardExams, board: biseQuetta, grade: grade11, subject: biology, year: 2022, file: 'https://bbiseqta.edu.pk/' },
+      { category: mdcat, board: null, grade: null, subject: biology, year: 2023, file: 'https://www.pmdc.pk/Admissions/MedicalandDentalCollegeAdmissionTestMDCAT.aspx' },
+      { category: ecat, board: null, grade: null, subject: math, year: 2022, file: 'https://admission.uet.edu.pk/' },
+      { category: ecat, board: null, grade: null, subject: physics, year: 2023, file: 'https://admission.uet.edu.pk/' },
     ];
 
-    for (const seed of pastPapersSeed) {
+    for (const s of pastPapersSeed) {
       const existing = await pastPaperRepo.findOne({
         where: {
-          category: { id: seed.category.id },
-          board: seed.board ? { id: seed.board.id } : undefined,
-          grade: seed.grade ? { id: seed.grade.id } : undefined,
-          subject: seed.subject ? { id: seed.subject.id } : undefined,
-          year: seed.year,
+          category: { id: s.category.id },
+          board: s.board ? { id: s.board.id } : undefined,
+          grade: s.grade ? { id: s.grade.id } : undefined,
+          subject: s.subject ? { id: s.subject.id } : undefined,
+          year: s.year,
         },
       });
 
       if (!existing) {
         await pastPaperRepo.save(
           pastPaperRepo.create({
-            category: seed.category,
-            board: seed.board ?? null,
-            grade: seed.grade ?? null,
-            subject: seed.subject ?? null,
-            year: seed.year,
-            file: seed.file,
+            category: s.category,
+            board: s.board ?? null,
+            grade: s.grade ?? null,
+            subject: s.subject ?? null,
+            year: s.year,
+            file: s.file,
             status: Status.ACTIVE,
           })
         );
       }
     }
 
-    console.log('Education seed data inserted/verified successfully.');
+    console.log('Seed completed successfully.');
     process.exit(0);
   } catch (error) {
-    console.error('Error while seeding education data:', error);
+    console.error('Seed error:', error);
     process.exit(1);
   }
 }
