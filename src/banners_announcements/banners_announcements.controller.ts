@@ -23,6 +23,7 @@ import { ApiBody, ApiConsumes, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { CloudinaryFile } from 'src/common/interceptors/cloudinary-upload-interceptor';
 import { UserRole } from 'src/common/enums';
+import 'multer';
 
 @UseGuards(AuthGuard)
 @Controller('banners-announcements')

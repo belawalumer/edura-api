@@ -28,6 +28,7 @@ import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { PaginationQueryDto } from 'src/common/dto';
 import type { RequestWithUser } from 'src/auth/guard/auth_guard';
 import { Public } from 'src/auth/decorators/public.decorator';
+import 'multer';
 
 @UseGuards(AuthGuard)
 @Controller('user')
