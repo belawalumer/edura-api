@@ -24,7 +24,6 @@ import { ApiConsumes, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { CloudinaryFile } from '../common/interceptors/cloudinary-upload-interceptor';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { Public } from 'src/auth/decorators/public.decorator';
-import 'multer';
 
 @UseGuards(AuthGuard)
 @Controller('past-papers')

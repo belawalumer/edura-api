@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { createClient } from '@supabase/supabase-js';
-import type { Request } from 'express-serve-static-core';
+import type { Request } from 'express';
 import { User } from '../../user/entities/user.entity';
 import * as jwt from 'jsonwebtoken';
 import { InjectRepository } from '@nestjs/typeorm';
