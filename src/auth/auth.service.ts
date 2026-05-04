@@ -11,12 +11,13 @@ import { Repository } from 'typeorm';
 import { createClient } from '@supabase/supabase-js';
 import { UserRole } from 'src/common/enums';
 import { SignupDto } from './dto/create-auth.dto';
+import { toNullablePhone } from './helpers/normalize-phone';
 
 @Injectable()
 export class AuthService {
   private supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!
+    process.env.SUPABASE_URL ?? '',
+    process.env.SUPABASE_ANON_KEY ?? ''
   );
 
   constructor(
@@ -142,7 +143,6 @@ export class AuthService {
     if (!token) {
       throw new BadRequestException('Token is required');
     }
-
     const { data, error } = await this.supabase.auth.getUser(token);
     if (error || !data.user?.email) {
       throw new BadRequestException('Invalid social auth token');
@@ -150,12 +150,11 @@ export class AuthService {
 
     const email = data.user.email.trim().toLowerCase();
     let user = await this.userRepo.findOne({ where: { email } });
-
     if (!user) {
       user = this.userRepo.create({
         email,
         role: UserRole.USER,
-        phone: data.user.phone ?? null,
+        phone: toNullablePhone(data.user.phone),
         countryCode: null,
         name: String(data.user.user_metadata?.full_name || email),
         image: data.user.user_metadata?.avatar_url

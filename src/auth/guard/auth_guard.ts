@@ -15,6 +15,7 @@ import { Repository } from 'typeorm';
 import { UserRole } from 'src/common/enums';
 import { generateRefreshToken } from '../helpers/token.helper';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { toNullablePhone } from '../helpers/normalize-phone';
 
 export interface AuthUser {
   id?: number;
@@ -112,7 +113,7 @@ export class AuthGuard implements CanActivate {
           dbUser = this.userRepo.create({
             email,
             role: UserRole.USER,
-            phone: data.user.phone,
+            phone: toNullablePhone(data.user.phone),
             name: String(data.user.user_metadata?.full_name || email),
             image: data.user.user_metadata?.avatar_url
               ? String(data.user.user_metadata.avatar_url)
