@@ -1,10 +1,23 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Request, Response, NextFunction } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const logger = new Logger('HTTP');
+
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const { method, originalUrl } = req;
+    const start = Date.now();
+    res.on('finish', () => {
+      const ms = Date.now() - start;
+      const { statusCode } = res;
+      logger.log(`${method} ${originalUrl} ${statusCode} +${ms}ms`);
+    });
+    next();
+  });
 
   //Enable CORS
   app.enableCors({
