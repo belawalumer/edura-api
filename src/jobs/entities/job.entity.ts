@@ -91,6 +91,9 @@ export class Job {
   @Column({ type: 'date' })
   last_date_to_apply: Date;
 
+  @Column({ type: 'text', nullable: true })
+  apply_link: string;
+
   @OneToOne(
     () => JobPreferredCandidate,
     (preferredCandidate) => preferredCandidate.job,

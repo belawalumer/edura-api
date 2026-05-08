@@ -142,9 +142,13 @@ export class JobsService {
       careerLevel: job.careerLevel,
       total_positions: job.total_positions,
       employment_status: job.employment_status,
+      monthly_salary: job.monthly_salary,
+      degree_level: job.degree_level,
+      degree_area: job.degree_area,
       status: job.status,
       job_posted: job.job_posted,
       last_date_to_apply: job.last_date_to_apply,
+      apply_link: job.apply_link,
       saved: userId != null ? savedIds.has(job.id) : false,
     }));
 

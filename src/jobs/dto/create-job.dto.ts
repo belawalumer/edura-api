@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsDateString,
   ValidateNested,
+  IsUrl,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { EmploymentStatus, Status, Gender } from '../../common/enums';
@@ -105,6 +106,10 @@ export class CreateJobDto {
 
   @IsDateString()
   last_date_to_apply: string;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true })
+  apply_link?: string;
 
   @IsOptional()
   @ValidateNested()
