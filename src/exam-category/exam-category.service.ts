@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { ExamCategory } from './entities/exam-category.entity';
 import { CreateExamCategoryDto } from './dto/create-exam-category.dto';
 
@@ -15,18 +15,30 @@ export class ExamCategoryService {
     private readonly examCategoryRepo: Repository<ExamCategory>
   ) {}
 
-  async findParentCategories(): Promise<ExamCategory[]> {
-    return this.examCategoryRepo.find({
-      where: { parent: IsNull() },
-      order: { name: 'ASC' },
-    });
+  async findParentCategories(search?: string): Promise<ExamCategory[]> {
+    const qb = this.examCategoryRepo
+      .createQueryBuilder('category')
+      .where('category.parent IS NULL')
+      .orderBy('category.name', 'ASC');
+
+    if (search) {
+      qb.andWhere('category.name ILIKE :search', { search: `%${search}%` });
+    }
+
+    return qb.getMany();
   }
 
-  async findBoards(parentId: number): Promise<ExamCategory[]> {
-    return this.examCategoryRepo.find({
-      where: { parent: { id: parentId } },
-      order: { name: 'ASC' },
-    });
+  async findBoards(parentId: number, search?: string): Promise<ExamCategory[]> {
+    const qb = this.examCategoryRepo
+      .createQueryBuilder('board')
+      .where('board.parentId = :parentId', { parentId })
+      .orderBy('board.name', 'ASC');
+
+    if (search) {
+      qb.andWhere('board.name ILIKE :search', { search: `%${search}%` });
+    }
+
+    return qb.getMany();
   }
 
   async createBoards(

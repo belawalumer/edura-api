@@ -6,6 +6,7 @@ import {
   Param,
   ParseIntPipe,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { ExamCategoryService } from './exam-category.service';
 import { CreateExamCategoryDto } from './dto/create-exam-category.dto';
@@ -22,14 +23,14 @@ export class ExamCategoryController {
 
   @Get()
   @Public()
-  async getParentCategories() {
-    return this.examCategoryService.findParentCategories();
+  async getParentCategories(@Query('search') search?: string) {
+    return this.examCategoryService.findParentCategories(search);
   }
 
   @Get(':parentId/boards')
   @Public()
-  findBoards(@Param('parentId', ParseIntPipe) parentId: number) {
-    return this.examCategoryService.findBoards(parentId);
+  findBoards(@Param('parentId', ParseIntPipe) parentId: number, @Query('search') search?: string) {
+    return this.examCategoryService.findBoards(parentId, search);
   }
 
   @Post(':parentId/boards')
