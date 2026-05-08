@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Test } from '../tests/entities/test.entity';
-import { Repository } from 'typeorm';
+import { IsNull, MoreThan, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { BannersAnnouncement } from 'src/banners_announcements/entities/banners_announcement.entity';
 import { Status, UserRole } from 'src/common/enums';
@@ -81,11 +81,27 @@ export class DashboardService {
       take: 8,
     });
 
-    const sampleTest = await this.testRepo.findOne({
-      where: { status: Status.ACTIVE },
-      order: { id: 'ASC' },
+    const sampleTestWhere = [
+      { status: Status.ACTIVE, expire_at: MoreThan(new Date()) },
+      { status: Status.ACTIVE, expire_at: IsNull() },
+    ];
+
+    const sampleTestCount = await this.testRepo.count({
+      where: sampleTestWhere,
     });
 
+    let sampleTest: Test | null = null;
+    if (sampleTestCount > 0) {
+      const randomIndex = Math.floor(Math.random() * sampleTestCount);
+      const randomSampleTest = await this.testRepo.find({
+        where: sampleTestWhere,
+        order: { id: 'ASC' },
+        skip: randomIndex,
+        take: 1,
+      });
+      sampleTest = randomSampleTest[0] ?? null;
+    }
+    
     const topScorers = await this.userRepo.find({
       where: { role: UserRole.USER, isSuspended: false },
       order: { total_coins: 'DESC', id: 'ASC' },
@@ -99,8 +115,8 @@ export class DashboardService {
       this.testRepo.count(),
       this.jobRepo.count({ where: { status: Status.ACTIVE } }),
     ]);
-
-    return {
+  
+    return {  
       message: 'Home data retrieved successfully',
       data: {
         announcements,
@@ -116,6 +132,7 @@ export class DashboardService {
           department: job.department?.name ?? null,
           location: job.location?.name ?? null,
           last_date_to_apply: job.last_date_to_apply,
+          salary: job.monthly_salary ?? null,
         })),
         sample_test: sampleTest
           ? {
@@ -123,6 +140,7 @@ export class DashboardService {
               title: sampleTest.title,
               total_questions: sampleTest.total_questions,
               total_duration: sampleTest.total_duration,
+              expire_at: sampleTest.expire_at,
             }
           : null,
         top_scorers: topScorers.map((user, index) => ({

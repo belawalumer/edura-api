@@ -37,6 +37,9 @@ export class Test {
   @Column({ type: 'int' })
   total_duration: number;
 
+  @Column({ name: 'expire_at', type: 'timestamp', nullable: true })
+  expire_at?: Date;
+
   @Column({
     name: 'correct_marks',
     type: 'decimal',
