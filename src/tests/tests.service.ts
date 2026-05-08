@@ -70,9 +70,17 @@ export class TestsService {
 
   private formatDuration(seconds: number): string {
     const safeSeconds = Math.max(0, Math.floor(seconds));
-    const minutes = Math.floor(safeSeconds / 60);
-    const remainingSeconds = safeSeconds % 60;
-    return `${minutes}m ${remainingSeconds}s`;
+    const hours = Math.floor(safeSeconds / 3600);
+    const remAfterHours = safeSeconds % 3600;
+    const minutes = Math.floor(remAfterHours / 60);
+    const secs = remAfterHours % 60;
+
+    const parts: string[] = [];
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
+
+    return parts.join(' ');
   }
 
   private async completeAttemptWithScore(attempt: TestAttempt): Promise<{
@@ -134,10 +142,14 @@ export class TestsService {
     const remainingMs = attempt.end_time
       ? new Date(attempt.end_time).getTime() - completedTime.getTime()
       : 0;
-    const timeTakenSeconds =
+    const elapsedFromRemaining =
       remainingMs > 0
         ? totalDurationSeconds - Math.floor(remainingMs / 1000)
         : totalDurationSeconds;
+    const timeTakenSeconds = Math.min(
+      totalDurationSeconds,
+      Math.max(0, elapsedFromRemaining)
+    );
     const timeTaken = this.formatDuration(timeTakenSeconds);
 
     attempt.status = TestStatus.COMPLETED;
@@ -1399,10 +1411,17 @@ export class TestsService {
       const end = page * limit;
       const items = allQuestions.slice(start, end);
 
-      const saved_answers = (inProgressAttempt.answers ?? []).map((ua) => ({
-        question_id: ua.question.id,
-        selected_option_id: ua.selected_option_id,
-      }));
+      const saved_answers = (inProgressAttempt.answers ?? []).map((ua) => {
+        const selectedId = ua.selected_option_id;
+        const hasSelection = selectedId != null;
+        const correctOptionId = ua.question?.correctOptionId ?? null;
+        return {
+          question_id: ua.question.id,
+          selected_option_id: selectedId,
+          is_correct: hasSelection ? selectedId === correctOptionId : null,
+          correct_option_id: hasSelection ? correctOptionId : null,
+        };
+      });
 
       return {
         message: 'Test resumed successfully',
@@ -1609,11 +1628,28 @@ export class TestsService {
       await this.testAttemptRepo.save(attempt);
     }
 
+    const answer_feedback = answers
+      .map((ans) => {
+        const question = questionMap.get(ans.question_id);
+        if (!question) return null;
+        const selectedId = ans.selected_option_id;
+        const correctOptionId = question.correctOptionId ?? null;
+        const hasSelection = selectedId != null;
+        return {
+          question_id: ans.question_id,
+          selected_option_id: selectedId,
+          is_correct: hasSelection ? correctOptionId === selectedId : null,
+          correct_option_id: hasSelection ? correctOptionId : null,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row != null);
+
     return {
       message: 'Progress saved successfully',
       data: {
         status: attempt.status,
         remaining_duration: this.getAttemptRemainingDuration(attempt) ?? 0,
+        answer_feedback,
       },
     };
   }
