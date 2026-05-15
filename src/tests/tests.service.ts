@@ -178,6 +178,7 @@ export class TestsService {
   async create(createTestDto: CreateTestDto) {
     const {
       title,
+      status,
       total_questions,
       duration_minutes,
       categoryId,
@@ -248,6 +249,7 @@ export class TestsService {
 
         const test = manager.create(Test, {
           title,
+          status,
           total_questions,
           total_duration: duration_minutes,
           category,
@@ -298,6 +300,7 @@ export class TestsService {
 
         const test = manager.create(Test, {
           title,
+          status,
           total_questions,
           total_duration: duration_minutes,
           category,
@@ -347,6 +350,7 @@ export class TestsService {
 
         const parentTest = manager.create(Test, {
           title,
+          status,
           total_questions,
           total_duration: duration_minutes,
           category,
@@ -376,6 +380,7 @@ export class TestsService {
 
           const divisionTest = manager.create(Test, {
             title: div.title,
+            status,
             total_questions: div.total_questions,
             total_duration: div.duration_minutes,
             category,
