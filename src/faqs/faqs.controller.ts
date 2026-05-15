@@ -30,10 +30,24 @@ export class FaqsController {
     return this.faqsService.create(createFaqDto);
   }
 
+  @Get('admin')
+  @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
+  findAllForAdmin() {
+    return this.faqsService.findAllForAdmin();
+  }
+
   @Get()
   @Public()
   findAll() {
     return this.faqsService.findAll();
+  }
+
+  @Get(':id')
+  @Roles(UserRole.ADMIN)
+  @ApiExcludeEndpoint()
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.faqsService.findOne(id);
   }
 
   @Patch(':id')
