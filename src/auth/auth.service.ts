@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -94,6 +95,10 @@ export class AuthService {
     const user = await this.userRepo.findOne({ where: { email } });
     if (!user) throw new BadRequestException('Invalid credentials');
 
+    if (user.isSuspended) {
+      throw new ForbiddenException('Account suspended');
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) throw new BadRequestException('Invalid credentials');
     let refreshToken = user.refreshToken;
@@ -134,6 +139,10 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
+    if (user.isSuspended) {
+      throw new ForbiddenException('Account suspended');
+    }
+
     const accessToken = generateToken(user);
 
     return { accessToken };
@@ -163,6 +172,8 @@ export class AuthService {
         refreshToken: generateRefreshToken(),
       });
       await this.userRepo.save(user);
+    } else if (user.isSuspended) {
+      throw new ForbiddenException('Account suspended');
     } else if (!user.refreshToken) {
       user.refreshToken = generateRefreshToken();
       await this.userRepo.save(user);
