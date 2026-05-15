@@ -81,6 +81,10 @@ export class AuthGuard implements CanActivate {
         throw new UnauthorizedException('User not found');
       }
 
+      if (dbUser.isSuspended) {
+        throw new ForbiddenException('Account suspended');
+      }
+
       user = {
         id: dbUser.id,
         email: dbUser.email,
@@ -121,6 +125,8 @@ export class AuthGuard implements CanActivate {
             refreshToken: generateRefreshToken(),
           });
           await this.userRepo.save(dbUser);
+        } else if (dbUser.isSuspended) {
+          throw new ForbiddenException('Account suspended');
         }
 
         user = {
