@@ -22,11 +22,28 @@ export class FaqsService {
   }
 
   async findAll() {
+    const items = await this.faqRepo.find({
+      where: { visibility: true },
+      order: { id: 'ASC' },
+    });
+    return {
+      message: 'FAQs retrieved successfully',
+      data: items,
+    };
+  }
+
+  async findAllForAdmin() {
     const items = await this.faqRepo.find({ order: { id: 'ASC' } });
     return {
       message: 'FAQs retrieved successfully',
       data: items,
     };
+  }
+
+  async findOne(id: number) {
+    const faq = await this.faqRepo.findOne({ where: { id } });
+    if (!faq) throw new NotFoundException(`FAQ with ID ${id} not found`);
+    return { message: 'FAQ retrieved successfully', data: faq };
   }
 
   async update(id: number, updateDto: UpdateFaqDto) {
