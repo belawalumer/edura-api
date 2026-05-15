@@ -25,6 +25,7 @@ export interface AuthUser {
   countryCode?: string | null;
   name?: string;
   image?: string;
+  createdAt?: Date;
 }
 
 export interface JwtPayload {
@@ -89,6 +90,7 @@ export class AuthGuard implements CanActivate {
         role: dbUser.role,
         name: dbUser.name,
         image: dbUser.image ?? undefined,
+        createdAt: dbUser.createdAt,
       };
     } catch (err: any) {
       const e = err as { name?: string };

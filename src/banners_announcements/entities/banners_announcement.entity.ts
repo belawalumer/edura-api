@@ -1,5 +1,10 @@
 import { ContentType, Status } from '../../common/enums';
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import {
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+} from 'typeorm';
 
 @Entity('banners_announcements')
 export class BannersAnnouncement {
@@ -37,4 +42,7 @@ export class BannersAnnouncement {
 
   @Column({ nullable: true })
   image: string;
+
+  @CreateDateColumn()
+  createdAt: Date;
 }

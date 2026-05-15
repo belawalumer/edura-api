@@ -1,4 +1,11 @@
-import { Controller, Get, Param, ParseIntPipe, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { AuthGuard } from 'src/auth/guard/auth_guard';
 import type { RequestWithUser } from 'src/auth/guard/auth_guard';
@@ -34,6 +41,9 @@ export class DashboardController {
   @Get('dashboard/notifications')
   @UseGuards(AuthGuard)
   async getNotifications(@Req() req: RequestWithUser) {
-    return this.dashboardService.getNotifications(Number(req.user?.id));
+    return this.dashboardService.getNotifications(
+      Number(req.user?.id),
+      req.user?.createdAt
+    );
   }
 }

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Test } from '../tests/entities/test.entity';
-import { Repository } from 'typeorm';
+import { Repository, MoreThan } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { BannersAnnouncement } from 'src/banners_announcements/entities/banners_announcement.entity';
 import { Status, UserRole } from 'src/common/enums';
@@ -22,7 +22,7 @@ export class DashboardService {
     @InjectRepository(BannersAnnouncement)
     private readonly announcementRepo: Repository<BannersAnnouncement>,
     private readonly testimonialsService: TestimonialsService,
-    private readonly notificationsService: NotificationsService,
+    private readonly notificationsService: NotificationsService
   ) {}
 
   async getAdminDashboard() {
@@ -152,25 +152,33 @@ export class DashboardService {
     };
   }
 
-  async getNotifications(authUserId: number) {
-    const [recentAnnouncements, recentJobs, inProgressAttempts] = await Promise.all([
-      this.announcementRepo.find({
-        where: { status: Status.ACTIVE },
-        order: { activeFrom: 'DESC' },
-        take: 3,
-      }),
-      this.jobRepo.find({
-        where: { status: Status.ACTIVE },
-        order: { created_at: 'DESC' },
-        take: 3,
-      }),
-      this.testAttemptRepo.find({
-        where: { user_id: authUserId, status: TestStatus.IN_PROGRESS },
-        relations: ['test'],
-        order: { created_at: 'DESC' },
-        take: 2,
-      }),
-    ]);
+  async getNotifications(authUserId: number, userCreatedAt?: Date) {
+    const announcementWhere = userCreatedAt
+      ? { status: Status.ACTIVE, activeFrom: MoreThan(userCreatedAt) }
+      : { status: Status.ACTIVE };
+    const jobWhere = userCreatedAt
+      ? { status: Status.ACTIVE, created_at: MoreThan(userCreatedAt) }
+      : { status: Status.ACTIVE };
+
+    const [recentAnnouncements, recentJobs, inProgressAttempts] =
+      await Promise.all([
+        this.announcementRepo.find({
+          where: announcementWhere,
+          order: { activeFrom: 'DESC' },
+          take: 3,
+        }),
+        this.jobRepo.find({
+          where: jobWhere,
+          order: { created_at: 'DESC' },
+          take: 3,
+        }),
+        this.testAttemptRepo.find({
+          where: { user_id: authUserId, status: TestStatus.IN_PROGRESS },
+          relations: ['test'],
+          order: { created_at: 'DESC' },
+          take: 2,
+        }),
+      ]);
 
     const items = [
       ...recentAnnouncements.map((item) => ({
@@ -178,7 +186,9 @@ export class DashboardService {
         type: 'Announcements',
         title: item.title,
         description: item.description,
-        createdAt: item.activeFrom,
+        createdAt: item.createdAt
+          ? new Date(item.createdAt)
+          : new Date(item.activeFrom),
         to: `/announcements/${item.id}`,
       })),
       ...recentJobs.map((job) => ({
@@ -186,7 +196,7 @@ export class DashboardService {
         type: 'Jobs',
         title: `New job: ${job.title}`,
         description: 'A new opportunity is now available. Tap to view details.',
-        createdAt: job.created_at,
+        createdAt: new Date(job.created_at),
         to: `/jobs`,
       })),
       ...inProgressAttempts.map((attempt) => ({
@@ -194,17 +204,14 @@ export class DashboardService {
         type: 'Tests',
         title: `Resume ${attempt.test?.title ?? 'your test'}`,
         description: 'You have an in-progress test waiting for completion.',
-        createdAt: attempt.created_at,
+        createdAt: new Date(attempt.created_at),
         to: `/tests`,
       })),
-    ].sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
     const readStatus = await this.notificationsService.getReadStatus(
       authUserId,
-      items.map((i) => i.id),
+      items.map((i) => i.id)
     );
 
     const itemsWithReadStatus = items.map((item) => ({
@@ -237,14 +244,23 @@ export class DashboardService {
     });
 
     const testsCompleted = attempts.length;
-    const totalCorrect = attempts.reduce((sum, a) => sum + Number(a.total_correct ?? 0), 0);
-    const totalWrong = attempts.reduce((sum, a) => sum + Number(a.total_wrong ?? 0), 0);
+    const totalCorrect = attempts.reduce(
+      (sum, a) => sum + Number(a.total_correct ?? 0),
+      0
+    );
+    const totalWrong = attempts.reduce(
+      (sum, a) => sum + Number(a.total_wrong ?? 0),
+      0
+    );
     const totalAnswered = totalCorrect + totalWrong;
-    const accuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
+    const accuracy =
+      totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const weeklyAttempts = attempts.filter((a) => new Date(a.created_at) >= sevenDaysAgo);
+    const weeklyAttempts = attempts.filter(
+      (a) => new Date(a.created_at) >= sevenDaysAgo
+    );
 
     const weeklySpentMinutes = weeklyAttempts.reduce((sum, a) => {
       const totalDurationMin = Number(a.test?.total_duration ?? 0);
@@ -274,16 +290,29 @@ export class DashboardService {
       key = `${cursor.getFullYear()}-${cursor.getMonth()}-${cursor.getDate()}`;
     }
 
-    const testScores = attempts.slice(0, 5).reverse().map((attempt, index) => {
-      const answered = Number(attempt.total_correct ?? 0) + Number(attempt.total_wrong ?? 0);
-      const score = answered > 0 ? Math.round((Number(attempt.total_correct ?? 0) / answered) * 100) : 0;
-      return { test: String(index + 1), score };
-    });
+    const testScores = attempts
+      .slice(0, 5)
+      .reverse()
+      .map((attempt, index) => {
+        const answered =
+          Number(attempt.total_correct ?? 0) + Number(attempt.total_wrong ?? 0);
+        const score =
+          answered > 0
+            ? Math.round((Number(attempt.total_correct ?? 0) / answered) * 100)
+            : 0;
+        return { test: String(index + 1), score };
+      });
 
-    const subjectAgg = new Map<string, { totalCorrect: number; totalAnswered: number }>();
+    const subjectAgg = new Map<
+      string,
+      { totalCorrect: number; totalAnswered: number }
+    >();
     for (const attempt of attempts) {
       const subjectName = attempt.test?.subject?.name ?? 'General';
-      const item = subjectAgg.get(subjectName) ?? { totalCorrect: 0, totalAnswered: 0 };
+      const item = subjectAgg.get(subjectName) ?? {
+        totalCorrect: 0,
+        totalAnswered: 0,
+      };
       const correct = Number(attempt.total_correct ?? 0);
       const wrong = Number(attempt.total_wrong ?? 0);
       item.totalCorrect += correct;
