@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job } from './entities/job.entity';
 import { SavedJob } from './entities/saved_jobs.entity';
+import { JobApplication } from './entities/job-application.entity';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { GetJobsQueryDto } from './dto/get-jobs-query.dto';
@@ -31,7 +32,9 @@ export class JobsService {
     @InjectRepository(CareerLevel)
     private readonly careerLevelRepo: Repository<CareerLevel>,
     @InjectRepository(Department)
-    private readonly departmentRepo: Repository<Department>
+    private readonly departmentRepo: Repository<Department>,
+    @InjectRepository(JobApplication)
+    private readonly applicationRepo: Repository<JobApplication>,
   ) {}
 
   async getAllJobs(query: GetJobsQueryDto, userId?: number) {
@@ -328,6 +331,47 @@ export class JobsService {
 
     await this.savedJobRepo.remove(saved);
     return { message: 'Job removed from saved' };
+  }
+
+  async applyForJob(userId: number, jobId: number, coverLetter?: string) {
+    const job = await this.jobRepo.findOne({ where: { id: jobId } });
+    if (!job) throw new NotFoundException('Job not found');
+
+    const existing = await this.applicationRepo.findOne({
+      where: { user_id: userId, job_id: jobId },
+    });
+    if (existing) throw new ConflictException('You have already applied for this job');
+
+    const application = this.applicationRepo.create({
+      user_id: userId,
+      job_id: jobId,
+      cover_letter: coverLetter,
+    });
+    await this.applicationRepo.save(application);
+
+    return {
+      message: 'Application submitted successfully',
+      data: application,
+    };
+  }
+
+  async getUserApplications(userId: number) {
+    const applications = await this.applicationRepo.find({
+      where: { user_id: userId },
+      relations: ['job', 'job.industry', 'job.department', 'job.location'],
+      order: { applied_at: 'DESC' },
+    });
+    return {
+      message: 'Applications retrieved successfully',
+      data: applications,
+    };
+  }
+
+  async checkIfAlreadyApplied(userId: number, jobId: number) {
+    const application = await this.applicationRepo.findOne({
+      where: { user_id: userId, job_id: jobId },
+    });
+    return { applied: !!application };
   }
 
   private parseIds(idsString?: string): number[] {
