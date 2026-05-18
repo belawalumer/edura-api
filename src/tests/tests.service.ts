@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, EntityManager, In } from 'typeorm';
+import { Repository, DataSource, EntityManager, In, Not } from 'typeorm';
 import { Test } from './entities/test.entity';
 import { Question } from './entities/question.entity';
 import { Option } from './entities/option.entity';
@@ -167,10 +167,14 @@ export class TestsService {
     };
   }
 
-  private async applyCoinsToUser(userId: number, coinsEarned: number) {
+  private async applyCoinsToUser(
+    userId: number,
+    coinsEarned: number,
+    oldCoins = 0
+  ) {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) return;
-    user.total_coins = Number(user.total_coins ?? 0) + coinsEarned;
+    user.total_coins = Number(user.total_coins ?? 0) + coinsEarned - oldCoins;
     await this.userRepo.save(user);
   }
 
@@ -1699,6 +1703,21 @@ export class TestsService {
 
     const result = await this.completeAttemptWithScore(attempt);
 
+    // Get coins from old completed attempts for this test before deleting them
+    // (excludes the current attempt which was just marked COMPLETED)
+    const oldCompletedAttempts = await this.testAttemptRepo.find({
+      where: {
+        user_id: authUserId,
+        test: { id: attempt.test.id },
+        status: TestStatus.COMPLETED,
+        id: Not(attempt.id),
+      },
+    });
+    const oldCoins = oldCompletedAttempts.reduce(
+      (sum, a) => sum + Number(a.coins_earned ?? 0),
+      0
+    );
+
     await this.testAttemptRepo
       .createQueryBuilder()
       .delete()
@@ -1709,7 +1728,7 @@ export class TestsService {
       .andWhere('id <> :currentAttemptId', { currentAttemptId: attempt.id })
       .execute();
 
-    await this.applyCoinsToUser(authUserId, result.coins_earned);
+    await this.applyCoinsToUser(authUserId, result.coins_earned, oldCoins);
 
     return {
       message: 'Test submitted successfully',
