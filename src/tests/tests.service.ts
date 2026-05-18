@@ -64,7 +64,7 @@ export class TestsService {
     }
     return Math.max(
       0,
-      Math.floor((new Date(attempt.end_time).getTime() - Date.now()) / 1000),
+      Math.floor((new Date(attempt.end_time).getTime() - Date.now()) / 1000)
     );
   }
 
@@ -178,7 +178,6 @@ export class TestsService {
     await this.userRepo.save(user);
   }
 
-  
   async create(createTestDto: CreateTestDto) {
     const {
       title,
@@ -602,19 +601,26 @@ export class TestsService {
         }
       >();
       for (const attempt of attempts) {
-        const testId =  attempt.test?.id;
+        const testId = attempt.test?.id;
         if (testId == null) continue;
         const existing = map.get(testId);
         if (existing?.status === TestStatus.IN_PROGRESS) {
           continue;
         }
-        if (existing?.status === TestStatus.COMPLETED &&  attempt.status === TestStatus.COMPLETED) {
+        if (
+          existing?.status === TestStatus.COMPLETED &&
+          attempt.status === TestStatus.COMPLETED
+        ) {
           continue;
         }
         const attemptedCount =
-        attempt.answers?.filter((answer) => answer.selected_option_id != null).length ?? 0;
+          attempt.answers?.filter((answer) => answer.selected_option_id != null)
+            .length ?? 0;
         const remainingDuration = this.getAttemptRemainingDuration(attempt);
-        if (attempt.status === TestStatus.IN_PROGRESS && remainingDuration === 0) {
+        if (
+          attempt.status === TestStatus.IN_PROGRESS &&
+          remainingDuration === 0
+        ) {
           const expiredResult = await this.completeAttemptWithScore(attempt);
           await this.applyCoinsToUser(userId, expiredResult.coins_earned);
         }
@@ -655,7 +661,7 @@ export class TestsService {
       if (search) {
         qb.andWhere(
           '(test.title ILIKE :search OR subject.name ILIKE :search)',
-          { search: `%${search}%` },
+          { search: `%${search}%` }
         );
       }
 
@@ -688,7 +694,10 @@ export class TestsService {
           id: test.id,
           title: subjectName,
           subject: { id: test.subject?.id ?? null, value: subjectName },
-          grade: { id: test.grade?.id ?? null, value: test.grade?.name ?? null },
+          grade: {
+            id: test.grade?.id ?? null,
+            value: test.grade?.name ?? null,
+          },
           total_tests: 0,
           total_questions: 0,
           total_duration: 0,
@@ -719,7 +728,8 @@ export class TestsService {
         const status =
           group.in_progress_tests > 0
             ? 'in_progress'
-            : group.total_tests > 0 && group.completed_tests === group.total_tests
+            : group.total_tests > 0 &&
+                group.completed_tests === group.total_tests
               ? 'completed'
               : 'active';
 
@@ -852,13 +862,16 @@ export class TestsService {
           }
           const remaining_duration =
             remaining_duration_sum_sec > 0 ? remaining_duration_sum_sec : null;
-          const status = in_progress_tests > 0
-            ? 'in_progress'
-            : completed_tests === total_tests
-              ? 'completed'
-              : 'active';
+          const status =
+            in_progress_tests > 0
+              ? 'in_progress'
+              : completed_tests === total_tests
+                ? 'completed'
+                : 'active';
           const progress_pct =
-            total_tests > 0 ? Math.round((completed_tests / total_tests) * 100) : 0;
+            total_tests > 0
+              ? Math.round((completed_tests / total_tests) * 100)
+              : 0;
           return {
             ...base,
             status,
@@ -935,10 +948,10 @@ export class TestsService {
       testId?: number;
       entryType?: EntryType;
     },
-    userId?: number,
+    userId?: number
   ) {
     const getLatestAttemptMap = async (
-      testIds: number[],
+      testIds: number[]
     ): Promise<
       Map<
         number,
@@ -979,13 +992,20 @@ export class TestsService {
         if (existing?.status === TestStatus.IN_PROGRESS) {
           continue;
         }
-        if (existing?.status === TestStatus.COMPLETED && attempt.status === TestStatus.COMPLETED) {
+        if (
+          existing?.status === TestStatus.COMPLETED &&
+          attempt.status === TestStatus.COMPLETED
+        ) {
           continue;
         }
         const attemptedCount =
-          attempt.answers?.filter((answer) => answer.selected_option_id != null).length ?? 0;
+          attempt.answers?.filter((answer) => answer.selected_option_id != null)
+            .length ?? 0;
         const remainingDuration = this.getAttemptRemainingDuration(attempt);
-        if (attempt.status === TestStatus.IN_PROGRESS && remainingDuration === 0) {
+        if (
+          attempt.status === TestStatus.IN_PROGRESS &&
+          remainingDuration === 0
+        ) {
           const expiredResult = await this.completeAttemptWithScore(attempt);
           await this.applyCoinsToUser(userId, expiredResult.coins_earned);
         }
@@ -1223,10 +1243,14 @@ export class TestsService {
             continue;
           }
           const attemptedCount =
-            attempt.answers?.filter((answer) => answer.selected_option_id != null).length ??
-            0;
+            attempt.answers?.filter(
+              (answer) => answer.selected_option_id != null
+            ).length ?? 0;
           const remainingDuration = this.getAttemptRemainingDuration(attempt);
-          if (attempt.status === TestStatus.IN_PROGRESS && remainingDuration === 0) {
+          if (
+            attempt.status === TestStatus.IN_PROGRESS &&
+            remainingDuration === 0
+          ) {
             const expiredResult = await this.completeAttemptWithScore(attempt);
             await this.applyCoinsToUser(userId, expiredResult.coins_earned);
           }
@@ -1275,7 +1299,8 @@ export class TestsService {
             : 'active'
       ) as TestDetailsBasic['status'];
       if (attempt) {
-        testDetails.remaining_duration = this.getAttemptRemainingDuration(attempt) ?? 0;
+        testDetails.remaining_duration =
+          this.getAttemptRemainingDuration(attempt) ?? 0;
         testDetails.attempted_questions = attempt.attemptedCount;
         testDetails.coins_earned = Number(attempt.coins_earned ?? 0);
         if (attempt.status === TestStatus.COMPLETED) {
@@ -1349,11 +1374,11 @@ export class TestsService {
       if (test.divisions && test.divisions.length > 0) {
         testDetails.entry_total_questions = test.divisions.reduce(
           (s, d) => s + Number(d.total_questions ?? 0),
-          0,
+          0
         );
         testDetails.entry_total_duration = test.divisions.reduce(
           (s, d) => s + Number(d.total_duration ?? 0),
-          0,
+          0
         );
         testDetails.entry_divisions_count = test.divisions.length;
       } else {
@@ -1392,44 +1417,43 @@ export class TestsService {
           await this.completeAttemptWithScore(inProgressAttempt);
         await this.applyCoinsToUser(authUserId, expiredResult.coins_earned);
       } else {
+        const allQuestions = inProgressAttempt.attemptedQuestions
+          .sort((a, b) => a.question_order - b.question_order)
+          .map((aq) => ({
+            id: aq.question.id,
+            title: aq.question.title,
+            options: aq.question.options.map((opt) => ({
+              id: opt.id,
+              value: opt.value,
+            })),
+          }));
 
-      const allQuestions = inProgressAttempt.attemptedQuestions
-        .sort((a, b) => a.question_order - b.question_order)
-        .map((aq) => ({
-          id: aq.question.id,
-          title: aq.question.title,
-          options: aq.question.options.map((opt) => ({
-            id: opt.id,
-            value: opt.value,
-          })),
+        const start = (page - 1) * limit;
+        const end = page * limit;
+        const items = allQuestions.slice(start, end);
+
+        const saved_answers = (inProgressAttempt.answers ?? []).map((ua) => ({
+          question_id: ua.question.id,
+          selected_option_id: ua.selected_option_id,
         }));
 
-      const start = (page - 1) * limit;
-      const end = page * limit;
-      const items = allQuestions.slice(start, end);
-
-      const saved_answers = (inProgressAttempt.answers ?? []).map((ua) => ({
-        question_id: ua.question.id,
-        selected_option_id: ua.selected_option_id,
-      }));
-
-      return {
-        message: 'Test resumed successfully',
-        data: {
-          test_attempt_id: inProgressAttempt.id,
-          resume: true,
-          duration: remainingDuration,
-          items,
-          saved_answers,
-          meta: {
-            total: allQuestions.length,
-            page,
-            limit,
-            totalPages: Math.ceil(allQuestions.length / limit),
-            hasMore: page * limit < allQuestions.length,
+        return {
+          message: 'Test resumed successfully',
+          data: {
+            test_attempt_id: inProgressAttempt.id,
+            resume: true,
+            duration: remainingDuration,
+            items,
+            saved_answers,
+            meta: {
+              total: allQuestions.length,
+              page,
+              limit,
+              totalPages: Math.ceil(allQuestions.length / limit),
+              hasMore: page * limit < allQuestions.length,
+            },
           },
-        },
-      };
+        };
       }
     }
 
@@ -1458,7 +1482,8 @@ export class TestsService {
     if (!questions.length)
       throw new BadRequestException('No questions found for this test');
 
-    let orderedQuestions = attempt_count === 1 ? questions : this.shuffleArray(questions);
+    let orderedQuestions =
+      attempt_count === 1 ? questions : this.shuffleArray(questions);
 
     // For restart attempts, prioritize previously unanswered questions.
     if (lastAttempt) {
@@ -1467,7 +1492,9 @@ export class TestsService {
         relations: ['question'],
       });
       const answeredIds = new Set(lastAttemptAnswers.map((a) => a.question.id));
-      const unansweredQuestions = questions.filter((q) => !answeredIds.has(q.id));
+      const unansweredQuestions = questions.filter(
+        (q) => !answeredIds.has(q.id)
+      );
       if (unansweredQuestions.length > 0) {
         orderedQuestions = this.shuffleArray(unansweredQuestions);
       }
@@ -1674,28 +1701,27 @@ export class TestsService {
         .map((answer) => [answer.question.id, answer])
     );
 
-    const answersToSave = answers
-      .map((ans) => {
-        const question = questionMap.get(ans.question_id)!;
-        const isCorrect: boolean | null =
-          ans.selected_option_id == null
-            ? null
-            : question.correctOptionId === ans.selected_option_id;
+    const answersToSave = answers.map((ans) => {
+      const question = questionMap.get(ans.question_id)!;
+      const isCorrect: boolean | null =
+        ans.selected_option_id == null
+          ? null
+          : question.correctOptionId === ans.selected_option_id;
 
-        const existingAnswer = existingAnswersByQuestionId.get(ans.question_id);
-        if (existingAnswer) {
-          existingAnswer.selected_option_id = ans.selected_option_id;
-          existingAnswer.isCorrect = isCorrect;
-          return existingAnswer;
-        }
+      const existingAnswer = existingAnswersByQuestionId.get(ans.question_id);
+      if (existingAnswer) {
+        existingAnswer.selected_option_id = ans.selected_option_id;
+        existingAnswer.isCorrect = isCorrect;
+        return existingAnswer;
+      }
 
-        return this.userAnswerRepo.create({
-          testAttempt: attempt,
-          question,
-          selected_option_id: ans.selected_option_id,
-          isCorrect,
-        });
+      return this.userAnswerRepo.create({
+        testAttempt: attempt,
+        question,
+        selected_option_id: ans.selected_option_id,
+        isCorrect,
       });
+    });
 
     if (answersToSave.length > 0) {
       await this.userAnswerRepo.save(answersToSave);
