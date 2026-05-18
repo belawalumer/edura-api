@@ -1,5 +1,6 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Post, Body } from '@nestjs/common';
 import { TestimonialsService } from './testimonials.service';
+import { CreateTestimonialDto } from './dto/create-testimonial.dto';
 
 @Controller('testimonials')
 export class TestimonialsController {
@@ -11,6 +12,15 @@ export class TestimonialsController {
     return {
       message: 'Testimonials retrieved successfully',
       data: testimonials,
+    };
+  }
+
+  @Post()
+  async create(@Body() dto: CreateTestimonialDto) {
+    const testimonial = await this.testimonialsService.create(dto);
+    return {
+      message: 'Testimonial submitted successfully.',
+      data: testimonial,
     };
   }
 }

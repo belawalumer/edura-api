@@ -16,6 +16,7 @@ import { JobsService } from './jobs.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { GetJobsQueryDto } from './dto/get-jobs-query.dto';
+import { CreateJobApplicationDto } from './dto/create-job-application.dto';
 import { AuthGuard } from 'src/auth/guard/auth_guard';
 import type { RequestWithUser } from 'src/auth/guard/auth_guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
@@ -64,6 +65,37 @@ export class JobsController {
     if (userId == null)
       throw new UnauthorizedException('User not authenticated');
     return this.jobsService.unsaveJob(userId, jobId);
+  }
+
+  @Post('apply/:jobId')
+  async applyForJob(
+    @Req() req: RequestWithUser,
+    @Param('jobId', ParseIntPipe) jobId: number,
+    @Body() dto: CreateJobApplicationDto
+  ) {
+    const userId = req.user?.id;
+    if (userId == null)
+      throw new UnauthorizedException('User not authenticated');
+    return this.jobsService.applyForJob(userId, jobId, dto.cover_letter);
+  }
+
+  @Get('my-applications')
+  async getUserApplications(@Req() req: RequestWithUser) {
+    const userId = req.user?.id;
+    if (userId == null)
+      throw new UnauthorizedException('User not authenticated');
+    return this.jobsService.getUserApplications(userId);
+  }
+
+  @Get('check-application/:jobId')
+  async checkIfAlreadyApplied(
+    @Req() req: RequestWithUser,
+    @Param('jobId', ParseIntPipe) jobId: number
+  ) {
+    const userId = req.user?.id;
+    if (userId == null)
+      throw new UnauthorizedException('User not authenticated');
+    return this.jobsService.checkIfAlreadyApplied(userId, jobId);
   }
 
   @Get(':id')
