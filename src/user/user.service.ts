@@ -94,7 +94,6 @@ export class UserService {
     if (!user) throw new NotFoundException('User not found');
 
     user.name = dto.name ?? user.name;
-  
     user.phone = dto.phone ?? user.phone;
     user.countryCode = dto.countryCode ?? user.countryCode;
 
@@ -127,11 +126,149 @@ export class UserService {
     timeframe: 'all_time' | 'weekly' | 'monthly' = 'all_time',
     limit = 20,
     authUserId?: number,
-    onlyMe = false
+    onlyMe = false,
+    subject?: string
   ) {
     const safeLimit = Math.min(Math.max(limit, 1), 100);
 
     if (timeframe === 'all_time') {
+      if (subject) {
+        const subjectInt = parseInt(subject, 10);
+        const raw = onlyMe
+          ? []
+          : await this.userRepo
+              .createQueryBuilder('user')
+              .leftJoin(
+                'test_attempts',
+                'attempt',
+                'attempt.user_id = user.id AND attempt.status = :status AND attempt.test_id IN (SELECT id FROM academic_tests WHERE subject_id = :subjectId)',
+                {
+                  status: TestStatus.COMPLETED,
+                  subjectId: subjectInt,
+                }
+              )
+              .select('user.id', 'user_id')
+              .addSelect('user.name', 'name')
+              .addSelect('user.image', 'image')
+              .addSelect('COALESCE(SUM(attempt.coins_earned), 0)', 'score')
+              .where('user.role = :role', { role: UserRole.USER })
+              .andWhere('user.isSuspended = false')
+              .groupBy('user.id')
+              .addGroupBy('user.name')
+              .addGroupBy('user.image')
+              .orderBy('score', 'DESC')
+              .addOrderBy('user.id', 'ASC')
+              .take(safeLimit)
+              .getRawMany<{
+                user_id: string;
+                name: string;
+                image: string | null;
+                score: string;
+              }>();
+
+        const ranked = raw.map((row, index) => ({
+          rank: index + 1,
+          user_id: Number(row.user_id),
+          name: row.name,
+          image: row.image ?? null,
+          score: Number(row.score ?? 0),
+        }));
+
+        let currentUser: {
+          rank: number;
+          user_id: number;
+          name: string;
+          image: string | null;
+          score: number;
+        } | null = null;
+
+        if (authUserId) {
+          const inTop = onlyMe
+            ? undefined
+            : ranked.find((item) => item.user_id === authUserId);
+          if (inTop) {
+            currentUser = inTop;
+          } else {
+            const meAgg = await this.testAttemptRepo
+              .createQueryBuilder('attempt')
+              .innerJoin(User, 'user', 'user.id = attempt.user_id')
+              .innerJoin('attempt.test', 'test')
+              .select('attempt.user_id', 'user_id')
+              .addSelect('user.name', 'name')
+              .addSelect('user.image', 'image')
+              .addSelect('COALESCE(SUM(attempt.coins_earned), 0)', 'score')
+              .where('attempt.status = :status', {
+                status: TestStatus.COMPLETED,
+              })
+              .andWhere('test.subject_id = :subjectId', {
+                subjectId: subjectInt,
+              })
+              .andWhere('user.role = :role', { role: UserRole.USER })
+              .andWhere('user.isSuspended = false')
+              .andWhere('attempt.user_id = :authUserId', { authUserId })
+              .groupBy('attempt.user_id')
+              .addGroupBy('user.name')
+              .addGroupBy('user.image')
+              .getRawOne<{
+                user_id: string;
+                name: string;
+                image: string | null;
+                score: string;
+              }>();
+
+            if (meAgg) {
+              const score = Number(meAgg.score ?? 0);
+              const tieUserId = Number(meAgg.user_id);
+
+              const aggregateQb = this.testAttemptRepo
+                .createQueryBuilder('attempt')
+                .innerJoin(User, 'user', 'user.id = attempt.user_id')
+                .innerJoin('attempt.test', 'test')
+                .select('attempt.user_id', 'user_id')
+                .addSelect('COALESCE(SUM(attempt.coins_earned), 0)', 'score')
+                .where('attempt.status = :status', {
+                  status: TestStatus.COMPLETED,
+                })
+                .andWhere('test.subject_id = :subjectId', {
+                  subjectId: subjectInt,
+                })
+                .andWhere('user.role = :role', { role: UserRole.USER })
+                .andWhere('user.isSuspended = false')
+                .groupBy('attempt.user_id');
+
+              const higherCountRow = await this.userRepo.manager
+                .createQueryBuilder()
+                .select('COUNT(*)', 'higher_count')
+                .from(`(${aggregateQb.getQuery()})`, 'lb')
+                .where(
+                  '(lb.score::numeric > :score OR (lb.score::numeric = :score AND lb.user_id::int < :tieUserId))',
+                  { score, tieUserId }
+                )
+                .setParameters(aggregateQb.getParameters())
+                .getRawOne<{ higher_count: string }>();
+
+              const higherCount = Number(higherCountRow?.higher_count ?? 0);
+              currentUser = {
+                rank: higherCount + 1,
+                user_id: tieUserId,
+                name: meAgg.name,
+                image: meAgg.image ?? null,
+                score,
+              };
+            }
+          }
+        }
+
+        return {
+          message: 'Leaderboard retrieved successfully',
+          data: {
+            timeframe,
+            items: ranked,
+            currentUser,
+          },
+        };
+      }
+
       const topUsers = onlyMe
         ? []
         : await this.userRepo
@@ -222,6 +359,7 @@ export class UserService {
       : await this.testAttemptRepo
           .createQueryBuilder('attempt')
           .innerJoin(User, 'user', 'user.id = attempt.user_id')
+          .innerJoin('attempt.test', 'test')
           .select('attempt.user_id', 'user_id')
           .addSelect('user.name', 'name')
           .addSelect('user.image', 'image')
@@ -230,6 +368,9 @@ export class UserService {
           .andWhere('attempt.created_at >= :fromDate', { fromDate })
           .andWhere('user.role = :role', { role: UserRole.USER })
           .andWhere('user.isSuspended = false')
+          .andWhere(subject ? 'test.subject_id = :subjectId' : '1=1', {
+            subjectId: subject ? parseInt(subject, 10) : undefined,
+          })
           .groupBy('attempt.user_id')
           .addGroupBy('user.name')
           .addGroupBy('user.image')
@@ -357,7 +498,13 @@ export class UserService {
     image: string | null;
     score: number;
   } | null> {
-    const rows = (await this.userRepo.query(
+    const rows: {
+      user_id: string | number;
+      name: string;
+      image: string | null;
+      score: string | number;
+      rank: string | number;
+    }[] = await this.userRepo.query(
       `
       WITH per_user AS (
         SELECT u.id AS user_id,
@@ -387,13 +534,7 @@ export class UserService {
       WHERE p1.user_id = $4
       `,
       [TestStatus.COMPLETED, fromDate, UserRole.USER, userId]
-    )) as Array<{
-      user_id: string | number;
-      name: string;
-      image: string | null;
-      score: string | number;
-      rank: string | number;
-    }>;
+    );
 
     const row = rows[0];
     if (!row) return null;

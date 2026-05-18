@@ -70,6 +70,7 @@ export class UserController {
     @Query('timeframe') timeframe?: 'all_time' | 'weekly' | 'monthly',
     @Query('limit') limit?: string,
     @Query('onlyMe') onlyMe?: string,
+    @Query('subject') subject?: string,
     @Req() req?: RequestWithUser
   ) {
     const parsedLimit =
@@ -83,7 +84,8 @@ export class UserController {
       timeframe ?? 'all_time',
       parsedLimit ?? 20,
       req?.user?.id,
-      parsedOnlyMe
+      parsedOnlyMe,
+      subject
     );
   }
 

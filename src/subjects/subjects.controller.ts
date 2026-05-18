@@ -1,3 +1,4 @@
+import { Public } from 'src/auth/decorators/public.decorator';
 import {
   Controller,
   Get,
@@ -35,6 +36,12 @@ export class SubjectsController {
   @Roles(UserRole.ADMIN)
   findAll(@Query() query: PaginationQueryDto) {
     return this.subjectsService.findAll(query);
+  }
+
+  @Get('all')
+  @Public()
+  findAllPublic() {
+    return this.subjectsService.findAllPublic();
   }
 
   @Patch(':id')

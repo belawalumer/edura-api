@@ -27,6 +27,13 @@ export class SubjectsService {
     return { message: 'Subject created successfully', data: savedSubject };
   }
 
+  async findAllPublic() {
+    const items = await this.subjectRepo.find({
+      order: { id: 'ASC' },
+    });
+    return { message: 'Subjects retrieved successfully', data: { items } };
+  }
+
   async findAll(query: PaginationQueryDto) {
     const { page = 1, limit = 10, search } = query;
 
