@@ -7,7 +7,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
-import { ChangePasswordDto, UpdateAdminDto } from './dto/user.dto';
+import {
+  ChangePasswordDto,
+  UpdateAdminDto,
+  UpdateUserProfileDto,
+} from './dto/user.dto';
 import { TestStatus, UserRole } from 'src/common/enums';
 import { PaginationQueryDto } from 'src/common/dto';
 import { TestAttempt } from 'src/tests/entities/test_attempt.entity';
@@ -87,18 +91,19 @@ export class UserService {
 
   async updateMyProfile(
     id: number,
-    dto: Partial<UpdateAdminDto>,
+    dto: Partial<UpdateUserProfileDto>,
     imageUrl?: string
   ) {
     const user = await this.userRepo.findOne({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
     user.name = dto.name ?? user.name;
-    user.phone = dto.phone ?? user.phone;
-    user.countryCode = dto.countryCode ?? user.countryCode;
+    user.phone = dto.phone && dto.phone.trim() !== '' ? dto.phone : user.phone;
+    // eslint-disable-next-line prettier/prettier
+    user.countryCode = dto.countryCode && dto.countryCode.trim() !== '' ? dto.countryCode : user.countryCode;
 
-    user.email = dto.email ?? user.email;
-    user.grade = dto.grade ?? user.grade;
+    user.email = dto.email && dto.email.trim() !== '' ? dto.email : user.email;
+    user.grade = dto.grade && dto.grade.trim() !== '' ? dto.grade : user.grade;
 
     if (imageUrl) {
       user.image = imageUrl;

@@ -43,7 +43,7 @@ export class UserController {
   @ApiConsumes('multipart/form-data')
   async updateMyProfile(
     @Req() req: RequestWithUser,
-    @Body() dto: UpdateUserProfileDto,
+    @Body() body: Partial<UpdateUserProfileDto>,
     @UploadedFile() file?: Express.Multer.File
   ) {
     const userId = req.user?.id;
@@ -61,7 +61,7 @@ export class UserController {
       throw new BadRequestException('User not authenticated');
     }
 
-    return this.userService.updateMyProfile(userId, dto, imageUrl);
+    return this.userService.updateMyProfile(userId, body, imageUrl);
   }
 
   @Get('leaderboard')
